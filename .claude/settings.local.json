@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"c:\\\\dev\\\\parking-map\" -Recurse -Exclude \"node_modules\" -Force)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(Sort-Object)",
+      "PowerShell(pip install openpyxl -q 2>&1)",
+      "PowerShell(tail -3)",
+      "PowerShell(pip install openpyxl -q)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5051/api/parkings)",
+      "Bash(ls \"C:\\\\Users\\\\denuar.hernandez\\\\Desktop\\\\REPORTES\\\\INFORMES POR MES\\\\2026\\\\MAYO\")",
+      "Read(//c/Users/denuar.hernandez/Desktop/REPORTES/INFORMES POR MES/2026/MAYO/**)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(find \"/mnt/c/Users/denuar.hernandez\" -name \"*.xlsx\" -o -name \"*.xlsm\" 2>/dev/null | grep -i \"infrac\\\\|music\\\\|música\" | head -10)",
+      "Read(//mnt/c/Users/**)"
+    ]
+  }
+}

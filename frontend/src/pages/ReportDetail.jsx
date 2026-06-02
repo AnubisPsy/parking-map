@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchReport, createShareLink } from '../api';
+import InfractionDetail from './InfractionDetail';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend,
@@ -43,21 +44,21 @@ export default function ReportDetail() {
     if (!report) return [];
     const map = {};
     DAY_ORDER.forEach(d => { map[d] = 0; });
-    report.voltage_drops.forEach(v => { if (map[v.day] !== undefined) map[v.day]++; });
+    (report.voltage_drops || []).forEach(v => { if (map[v.day] !== undefined) map[v.day]++; });
     return DAY_ORDER.filter(d => map[d] > 0).map(d => ({ day: d.slice(0, 3), count: map[d] }));
   }, [report]);
 
   const voltageByBranch = useMemo(() => {
     if (!report) return [];
     const map = {};
-    report.voltage_drops.forEach(v => { map[v.branch] = (map[v.branch] || 0) + 1; });
+    (report.voltage_drops || []).forEach(v => { map[v.branch] = (map[v.branch] || 0) + 1; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([branch, count]) => ({ branch, count }));
   }, [report]);
 
   const nonDeployedByBranch = useMemo(() => {
     if (!report) return [];
     const map = {};
-    report.non_deployed.forEach(v => { map[v.branch] = (map[v.branch] || 0) + 1; });
+    (report.non_deployed || []).forEach(v => { map[v.branch] = (map[v.branch] || 0) + 1; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).map(([branch, count]) => ({ branch, count }));
   }, [report]);
 
@@ -65,7 +66,7 @@ export default function ReportDetail() {
     if (!report) return [];
     const map = {};
     DAY_ORDER.forEach(d => { map[d] = 0; });
-    report.non_deployed.forEach(v => { if (map[v.day] !== undefined) map[v.day]++; });
+    (report.non_deployed || []).forEach(v => { if (map[v.day] !== undefined) map[v.day]++; });
     return DAY_ORDER.map(d => ({ day: d.slice(0, 3), count: map[d] }));
   }, [report]);
 
@@ -87,15 +88,16 @@ export default function ReportDetail() {
   const availableDays = useMemo(() => {
     if (!report) return [];
     const withData = new Set([
-      ...report.voltage_drops.map(v => v.day),
-      ...report.non_deployed.map(v => v.day),
-      ...report.late_departures.map(v => v.day),
+      ...(report.voltage_drops || []).map(v => v.day),
+      ...(report.non_deployed || []).map(v => v.day),
+      ...(report.late_departures || []).map(v => v.day),
     ]);
     return DAY_ORDER.filter(d => withData.has(d));
   }, [report]);
 
   if (loading) return <FullCenter><Loader2 size={36} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} /></FullCenter>;
   if (!report) return <FullCenter><p style={{ color: '#64748b' }}>Reporte no encontrado</p></FullCenter>;
+  if (report.type === 'infractions') return <InfractionDetail report={report} id={id} />;
 
   const tabs = [
     { id: 'resumen', label: 'Resumen' },

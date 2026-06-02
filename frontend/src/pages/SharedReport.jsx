@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchShareData } from '../api';
+import InfractionDetail from './InfractionDetail';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell, Legend,
@@ -104,6 +105,11 @@ export default function SharedReport() {
   if (status === 'loading') return <Splash icon={<Loader2 size={48} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} />} title="Cargando reporte..." />;
   if (status === 'expired') return <Splash icon={<Timer size={48} color="#94a3b8" />} title="Enlace expirado" desc="Este enlace ya no es válido." />;
   if (status === 'notfound') return <Splash icon={<Search size={48} color="#94a3b8" />} title="Enlace no encontrado" desc="El enlace no existe o fue eliminado." />;
+
+  // Infraction report — render standalone view (no share button, no back nav)
+  if (report.type === 'infractions') {
+    return <InfractionDetail report={report} showShare={false} onBack={null} />;
+  }
 
   const tabs = [
     { id: 'resumen', label: 'Resumen' },

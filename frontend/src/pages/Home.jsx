@@ -7,7 +7,7 @@ import { buildUnitColors } from '../components/ParkingList';
 import ShareLinkModal from '../components/ShareLinkModal';
 import ImportModal from '../components/ImportModal';
 import SharesListModal from '../components/SharesListModal';
-import { Link2, Upload, Plus, ParkingSquare, Trash2, List, CalendarDays, X, ChevronDown, MapPin, BarChart2 } from 'lucide-react';
+import { Link2, Upload, Plus, ParkingSquare, Trash2, List, CalendarDays, X, ChevronDown, MapPin, BarChart2, Info } from 'lucide-react';
 import { useConfirm } from '../components/ConfirmModal';
 
 function formatDuration(minutes) {
@@ -42,6 +42,8 @@ export default function Home() {
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [expandedUnits, setExpandedUnits] = useState(new Set());
+  const [tooltipParking, setTooltipParking] = useState(null);
+  const [tooltipPos, setTooltipPos] = useState(0);
 
   useEffect(() => {
     fetchParkings()
@@ -175,6 +177,17 @@ export default function Home() {
 
   function handleSelect(id) {
     setHighlightId(prev => prev === id ? null : id);
+  }
+
+  function handleInfoEnter(e, p, color) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const top = Math.max(8, Math.min(rect.top, window.innerHeight - 280));
+    setTooltipParking({ ...p, _color: color });
+    setTooltipPos(top);
+  }
+
+  function handleInfoLeave() {
+    setTooltipParking(null);
   }
 
   return (
@@ -400,13 +413,22 @@ export default function Home() {
                                       </p>
                                     )}
                                   </div>
-                                  <button
-                                    onClick={(e) => handleDeleteOne(e, p.id)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '2px 4px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center' }}
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                                    <span
+                                      onMouseEnter={(e) => handleInfoEnter(e, p, color)}
+                                      onMouseLeave={handleInfoLeave}
+                                      style={{ color: '#cbd5e1', display: 'flex', alignItems: 'center', padding: '2px 4px', borderRadius: 4, cursor: 'default' }}
+                                    >
+                                      <Info size={12} />
+                                    </span>
+                                    <button
+                                      onClick={(e) => handleDeleteOne(e, p.id)}
+                                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '2px 4px', borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center' }}
+                                      title="Eliminar"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             );
@@ -452,8 +474,65 @@ export default function Home() {
         <SharesListModal onClose={() => setShowSharesList(false)} />
       )}
       {dialog}
+
+      {/* Tooltip de hover para el ícono de info del sidebar */}
+      {tooltipParking && (
+        <div style={{
+          position: 'fixed',
+          left: 368,
+          top: tooltipPos,
+          width: 262,
+          zIndex: 3000,
+          pointerEvents: 'none',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.22)',
+          border: '1px solid rgba(0,0,0,0.07)',
+        }}>
+          <div style={{ background: tooltipParking._color, color: 'white', padding: '10px 14px', fontWeight: 700, fontSize: 14 }}>
+            {tooltipParking.unit_name || tooltipParking.unit_id}
+          </div>
+          <div style={{ background: 'white', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <TooltipRow label="ID Unidad" value={tooltipParking.unit_id} />
+            <TooltipRow label="Tiempo estacionado" value={fmtDur(tooltipParking.parking_duration)} />
+            <TooltipRow label="Inicio" value={fmtDt(tooltipParking.parking_start)} />
+            <TooltipRow label="Coordenadas" value={`${tooltipParking.latitude.toFixed(6)}, ${tooltipParking.longitude.toFixed(6)}`} />
+            {tooltipParking.address && <TooltipRow label="Dirección" value={tooltipParking.address} />}
+            {tooltipParking.notes && <TooltipRow label="Notas" value={tooltipParking.notes} />}
+            <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+              Registrado: {fmtDt(tooltipParking.created_at)}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function TooltipRow({ label, value }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 12 }}>
+      <span style={{ color: '#64748b', flexShrink: 0 }}>{label}</span>
+      <span style={{ fontWeight: 500, textAlign: 'right', wordBreak: 'break-all' }}>{value}</span>
+    </div>
+  );
+}
+
+function fmtDur(minutes) {
+  if (!minutes) return '—';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
+}
+
+function fmtDt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('es-MX', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function dateKey(p) {

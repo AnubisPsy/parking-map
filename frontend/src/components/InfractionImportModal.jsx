@@ -45,11 +45,39 @@ async function parseInfractionFile(file) {
 
   const col = (name) => colMap[name] || name;
 
+  // Normaliza cualquier formato de fecha a YYYY-MM-DD para ordenamiento correcto
+  function normalizeDate(raw) {
+    if (!raw) return null;
+    // Ya es ISO: "2026-05-30"
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    // DD/MM/YYYY → YYYY-MM-DD
+    const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    // DD/MM/YYYY HH:MM:SS → toma solo la parte de fecha
+    const m2 = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s/);
+    if (m2) return `${m2[3]}-${m2[2].padStart(2, '0')}-${m2[1].padStart(2, '0')}`;
+    return null;
+  }
+
+  // Construye fecha+hora legible combinando columnas separadas si es necesario
+  function buildFechaStr(row) {
+    const fechaCol = col('fecha');
+    const horaCol = col('hora');
+    const fechaVal = String(row[fechaCol] || '').trim();
+    const horaVal = String(row[horaCol] || '').trim();
+    if (horaVal && fechaVal && !fechaVal.includes(':') && !fechaVal.includes(horaVal)) {
+      return `${fechaVal} ${horaVal}`;
+    }
+    return fechaVal;
+  }
+
   const infractions = rows.map(row => {
     const agrupacion = String(row[col('agrupacion')] || '').trim();
     const { plate, vehicle_num, branch_code } = parseAgrupacion(agrupacion);
-    const fechaStr = String(row[col('fecha')] || '').trim();
-    const date = fechaStr.split(' ')[0] || null;
+    const fechaStr = buildFechaStr(row);
+    // Extrae la parte de fecha pura (primer token sin hora)
+    const rawDate = fechaStr.split(/[\sT]/)[0] || null;
+    const date = normalizeDate(rawDate);
     const velocidadRaw = String(row[col('velocidad')] || '0');
     const velocidad = parseInt(velocidadRaw) || 0;
 

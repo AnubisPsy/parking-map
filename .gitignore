@@ -22,3 +22,8 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# IDE / workspace
+*.code-workspace
+.claude/settings.json
+.claude/settings.local.json

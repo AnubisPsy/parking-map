@@ -29,7 +29,9 @@ const DURATIONS = [
   { label: 'Personalizado', value: 'custom' },
 ];
 
-export default function ShareLinkModal({ units, onClose }) {
+const GROUP_LABELS = { unit: 'Unidad', date: 'Fecha', address: 'Sucursal', date_unit: 'Fecha + Unidad' };
+
+export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClose }) {
   const [mode, setMode] = useState('all'); // 'all' | 'select'
   const [selected, setSelected] = useState([]);
   const [duration, setDuration] = useState(60);
@@ -38,6 +40,11 @@ export default function ShareLinkModal({ units, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [includeGroupBy, setIncludeGroupBy] = useState(!!groupBy && groupBy !== 'unit');
+  const [includeDates, setIncludeDates] = useState(!!(dateFrom || dateTo));
+
+  const hasGroupByFilter = groupBy && groupBy !== 'unit';
+  const hasDatesFilter = !!(dateFrom || dateTo);
 
   function toggleUnit(uid) {
     setSelected(s => s.includes(uid) ? s.filter(x => x !== uid) : [...s, uid]);
@@ -58,8 +65,13 @@ export default function ShareLinkModal({ units, onClose }) {
         unit_ids: mode === 'all' ? null : selected,
         expires_in_minutes: mins,
       });
-      const url = `${window.location.origin}/map/${data.token}`;
-      setResult({ url, expires_at: data.expires_at });
+      const base = `${window.location.origin}/map/${data.token}`;
+      const params = new URLSearchParams();
+      if (includeDates && dateFrom) params.set('from', dateFrom);
+      if (includeDates && dateTo) params.set('to', dateTo);
+      if (includeGroupBy && groupBy && groupBy !== 'unit') params.set('groupBy', groupBy);
+      const qs = params.toString();
+      setResult({ url: qs ? `${base}?${qs}` : base, expires_at: data.expires_at });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -150,6 +162,44 @@ export default function ShareLinkModal({ units, onClose }) {
                   </div>
                 )}
               </div>
+
+              {(hasGroupByFilter || hasDatesFilter) && (
+                <div>
+                  <p style={sectionLabel}>Filtros del enlace</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {hasGroupByFilter && (
+                      <label style={toggleRow(includeGroupBy)}>
+                        <input type="checkbox" checked={includeGroupBy} onChange={e => setIncludeGroupBy(e.target.checked)}
+                          style={{ accentColor: '#2563eb', width: 15, height: 15, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>Agrupación</span>
+                          <span style={{ fontSize: 12, color: includeGroupBy ? '#2563eb' : '#94a3b8', marginLeft: 8 }}>
+                            {GROUP_LABELS[groupBy]}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, color: includeGroupBy ? '#16a34a' : '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+                          {includeGroupBy ? 'Incluido' : 'Manual'}
+                        </span>
+                      </label>
+                    )}
+                    {hasDatesFilter && (
+                      <label style={toggleRow(includeDates)}>
+                        <input type="checkbox" checked={includeDates} onChange={e => setIncludeDates(e.target.checked)}
+                          style={{ accentColor: '#2563eb', width: 15, height: 15, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 600, fontSize: 13 }}>Fechas</span>
+                          <span style={{ fontSize: 12, color: includeDates ? '#2563eb' : '#94a3b8', marginLeft: 8 }}>
+                            {dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : dateFrom ? `desde ${dateFrom}` : `hasta ${dateTo}`}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 11, color: includeDates ? '#16a34a' : '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+                          {includeDates ? 'Incluido' : 'Manual'}
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div style={errorBox}>{error}</div>
@@ -248,3 +298,9 @@ const btnSec = {
   border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14,
   fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'
 };
+const toggleRow = (active) => ({
+  display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
+  background: active ? '#eff6ff' : '#f8fafc',
+  border: `1px solid ${active ? '#bfdbfe' : '#e2e8f0'}`,
+  borderRadius: 8, cursor: 'pointer',
+});

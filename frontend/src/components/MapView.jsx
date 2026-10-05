@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { memo, useEffect, useMemo, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, Check } from 'lucide-react';
+import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel } from './TrackPlayback';
 
 const MAP_TYPES = [
   {
@@ -33,10 +34,15 @@ const COLORS = [
   '#0284c7', '#c2410c', '#166534', '#a16207', '#6d28d9',
 ];
 
-function createPinIcon(color) {
-  const svg = `<svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.9 12.43 21.49 12.96 22.01a1.4 1.4 0 002.08 0C15.57 35.49 28 23.9 28 14 28 6.268 21.732 0 14 0z" fill="${color}"/>
-    <circle cx="14" cy="14" r="6" fill="white"/>
+// Pin blanco con borde y "P" del color de la unidad, para distinguirlo de las
+// líneas de ruta (que usan el mismo color en sólido). Seleccionado: relleno ámbar.
+function createPinIcon(color, highlighted = false) {
+  const fill = highlighted ? '#f59e0b' : 'white';
+  const accent = highlighted ? 'white' : color;
+  const svg = `<svg width="28" height="36" viewBox="-1.5 -1.5 31 39" xmlns="http://www.w3.org/2000/svg">
+    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.9 12.43 21.49 12.96 22.01a1.4 1.4 0 002.08 0C15.57 35.49 28 23.9 28 14 28 6.268 21.732 0 14 0z"
+      fill="${fill}" stroke="${highlighted ? '#b45309' : color}" stroke-width="3"/>
+    <text x="14" y="19.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="900" fill="${accent}">P</text>
   </svg>`;
   return L.divIcon({
     html: svg,
@@ -64,13 +70,16 @@ function formatDate(iso) {
   });
 }
 
-function FitBounds({ parkings }) {
+function FitBounds({ parkings, tracks }) {
   const map = useMap();
   useEffect(() => {
-    if (!parkings.length) return;
-    const bounds = parkings.map(p => [p.latitude, p.longitude]);
+    const bounds = [
+      ...parkings.map(p => [p.latitude, p.longitude]),
+      ...tracks.flatMap(t => t.pts.map(p => [p.lat, p.lng])),
+    ];
+    if (!bounds.length) return;
     map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
-  }, [parkings, map]);
+  }, [parkings, tracks, map]);
   return null;
 }
 
@@ -87,8 +96,12 @@ function FlyToMarker({ parkings, highlightId }) {
   return null;
 }
 
-export default function MapView({ parkings, unitColors, highlightId, onMarkerClick }) {
+// `tracks` llega ya preparado con prepareTracks() (puntos en ms, color y paradas)
+export default function MapView({ parkings, unitColors, highlightId, onMarkerClick, tracks = [] }) {
   const [mapType, setMapType] = useState('hybrid');
+  const playback = usePlayback(tracks);
+  const [followId, setFollowId] = useState(null);
+  const followTrack = tracks.find(t => t.id === followId) || null;
   const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef(null);
   const current = MAP_TYPES.find(t => t.id === mapType);
@@ -124,47 +137,21 @@ export default function MapView({ parkings, unitColors, highlightId, onMarkerCli
           url={current.url}
           subdomains={current.subdomains}
         />
-        {parkings.length > 0 && <FitBounds parkings={parkings} />}
-      <FlyToMarker parkings={parkings} highlightId={highlightId} />
-        {parkings.map((p) => {
-          const color = unitColors[p.unit_id] || '#64748b';
-          const icon = createPinIcon(highlightId === p.id ? '#f59e0b' : color);
-          return (
-            <Marker
-              key={p.id}
-              position={[p.latitude, p.longitude]}
-              icon={icon}
-              eventHandlers={{ click: () => onMarkerClick?.(p.id) }}
-            >
-              <Popup>
-                <div style={{ fontFamily: 'inherit', minWidth: 220 }}>
-                  <div style={{
-                    background: color,
-                    color: 'white',
-                    padding: '10px 14px',
-                    borderRadius: '10px 10px 0 0',
-                    fontWeight: 700,
-                    fontSize: 15
-                  }}>
-                    {p.unit_name || p.unit_id}
-                  </div>
-                  <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <Row label="ID Unidad" value={p.unit_id} />
-                    <Row label="Tiempo estacionado" value={formatDuration(p.parking_duration)} />
-                    <Row label="Inicio" value={formatDate(p.parking_start)} />
-                    <Row label="Coordenadas" value={`${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`} />
-                    {p.address && <Row label="Dirección" value={p.address} />}
-                    {p.notes && <Row label="Notas" value={p.notes} />}
-                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                      Registrado: {formatDate(p.created_at)}
-                    </div>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          );
-        })}
+        {(parkings.length > 0 || tracks.length > 0) && <FitBounds parkings={parkings} tracks={tracks} />}
+        <FlyToMarker parkings={parkings} highlightId={highlightId} />
+        <TrackStaticLayers tracks={tracks} onSeek={playback.seek} />
+        <ParkingMarkers
+          parkings={parkings}
+          unitColors={unitColors}
+          highlightId={highlightId}
+          onMarkerClick={onMarkerClick}
+        />
+        <TrackDynamicLayers tracks={tracks} time={playback.time} followTrack={followTrack} />
       </MapContainer>
+
+      {tracks.length > 0 && (
+        <PlaybackPanel tracks={tracks} playback={playback} followId={followId} setFollowId={setFollowId} />
+      )}
 
       {/* Map type switcher */}
       <div ref={pickerRef} style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
@@ -231,6 +218,52 @@ export default function MapView({ parkings, unitColors, highlightId, onMarkerCli
     </div>
   );
 }
+
+// Memorizado: durante la reproducción MapView se re-renderiza en cada cuadro
+const ParkingMarkers = memo(function ParkingMarkers({ parkings, unitColors, highlightId, onMarkerClick }) {
+  return (
+    <>
+      {parkings.map((p) => {
+        const color = unitColors[p.unit_id] || '#64748b';
+        const icon = createPinIcon(color, highlightId === p.id);
+        return (
+          <Marker
+            key={p.id}
+            position={[p.latitude, p.longitude]}
+            icon={icon}
+            eventHandlers={{ click: () => onMarkerClick?.(p.id) }}
+          >
+            <Popup>
+              <div style={{ fontFamily: 'inherit', minWidth: 220 }}>
+                <div style={{
+                  background: color,
+                  color: 'white',
+                  padding: '10px 14px',
+                  borderRadius: '10px 10px 0 0',
+                  fontWeight: 700,
+                  fontSize: 15
+                }}>
+                  {p.unit_name || p.unit_id}
+                </div>
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <Row label="ID Unidad" value={p.unit_id} />
+                  <Row label="Tiempo estacionado" value={formatDuration(p.parking_duration)} />
+                  <Row label="Inicio" value={formatDate(p.parking_start)} />
+                  <Row label="Coordenadas" value={`${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`} />
+                  {p.address && <Row label="Dirección" value={p.address} />}
+                  {p.notes && <Row label="Notas" value={p.notes} />}
+                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                    Registrado: {formatDate(p.created_at)}
+                  </div>
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
+    </>
+  );
+});
 
 function Row({ label, value }) {
   return (

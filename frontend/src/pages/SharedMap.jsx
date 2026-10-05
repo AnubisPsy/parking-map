@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { fetchShareData } from '../api';
 import MapView from '../components/MapView';
 import { buildUnitColors } from '../components/ParkingList';
+import { prepareTracks } from '../components/TrackPlayback';
 import { Map as MapIcon, MapPin, Loader2, Clock, Search, AlertTriangle, CalendarDays, X, ChevronDown, LayoutGrid } from 'lucide-react';
 
 const GROUP_OPTIONS = [
@@ -138,7 +139,7 @@ export default function SharedMap() {
       });
   }, [token]);
 
-  const unitColors = useMemo(() => data ? buildUnitColors(data.parkings) : {}, [data]);
+  const unitColors = useMemo(() => data ? buildUnitColors([...data.parkings, ...(data.tracks || [])]) : {}, [data]);
 
   const groups = useMemo(() =>
     !data ? [] :
@@ -183,6 +184,18 @@ export default function SharedMap() {
       return true;
     });
   }, [groupFilteredParkings, filterDateFrom, filterDateTo]);
+
+  // Recorridos: dentro del rango de fechas y, si hay un grupo seleccionado, solo de sus unidades
+  const mapTracks = useMemo(() => {
+    if (!data?.tracks?.length) return [];
+    const units = new Set(visibleParkings.map(p => p.unit_id));
+    const tracks = data.tracks.filter(t => {
+      if (filterDateFrom && dateKey({ parking_start: t.end }) < filterDateFrom) return false;
+      if (filterDateTo && dateKey({ parking_start: t.start }) > filterDateTo) return false;
+      return filterKey === 'all' || units.has(t.unit_id);
+    });
+    return prepareTracks(tracks, unitColors, data.parkings);
+  }, [data, visibleParkings, filterKey, filterDateFrom, filterDateTo, unitColors]);
 
   function toggleGroup(key) {
     setExpandedGroups(prev => {
@@ -383,7 +396,7 @@ export default function SharedMap() {
         </aside>
 
         <main style={{ flex: 1 }}>
-          <MapView parkings={visibleParkings} unitColors={unitColors} highlightId={highlightId} onMarkerClick={(id) => setHighlightId(prev => prev === id ? null : id)} />
+          <MapView parkings={visibleParkings} unitColors={unitColors} highlightId={highlightId} onMarkerClick={(id) => setHighlightId(prev => prev === id ? null : id)} tracks={mapTracks} />
         </main>
       </div>
     </div>

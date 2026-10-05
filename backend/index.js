@@ -6,18 +6,21 @@ const { initDb } = require('./src/db');
 const parkingsRouter = require('./src/routes/parkings');
 const sharesRouter = require('./src/routes/shares');
 const reportsRouter = require('./src/routes/reports');
+const tracksRouter = require('./src/routes/tracks');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
-app.use(express.json());
+// Los recorridos GPS pueden traer miles de puntos
+app.use(express.json({ limit: '20mb' }));
 
 initDb();
 
 app.use('/api/parkings', parkingsRouter);
 app.use('/api/shares', sharesRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/tracks', tracksRouter);
 
 // Serve compiled frontend in production
 const distPath = path.join(__dirname, '..', 'frontend', 'dist');

@@ -5,12 +5,16 @@ import {
   deleteParkingsByUnit,
   deleteAllParkings,
   deleteParking,
+  fetchTracks,
+  deleteTrack,
 } from "../api";
 import MapView from "../components/MapView";
 import ParkingForm from "../components/ParkingForm";
 import { buildUnitColors } from "../components/ParkingList";
 import ShareLinkModal from "../components/ShareLinkModal";
 import ImportModal from "../components/ImportModal";
+import TrackImportModal from "../components/TrackImportModal";
+import { prepareTracks } from "../components/TrackPlayback";
 import SharesListModal from "../components/SharesListModal";
 import {
   Link2,
@@ -26,6 +30,7 @@ import {
   BarChart2,
   Info,
   LayoutGrid,
+  Route,
 } from "lucide-react";
 import { useConfirm } from "../components/ConfirmModal";
 
@@ -204,6 +209,10 @@ export default function Home() {
   const [showForm, setShowForm] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showTrackImport, setShowTrackImport] = useState(false);
+  const [tracks, setTracks] = useState([]);
+  const [selectedTrackIds, setSelectedTrackIds] = useState(new Set());
+  const [tracksOpen, setTracksOpen] = useState(true);
   const [showSharesList, setShowSharesList] = useState(false);
   const { confirm, dialog } = useConfirm();
   const [highlightId, setHighlightId] = useState(null);
@@ -217,13 +226,21 @@ export default function Home() {
   const [tooltipPos, setTooltipPos] = useState(0);
 
   useEffect(() => {
-    fetchParkings()
-      .then(setParkings)
+    Promise.all([fetchParkings(), fetchTracks()])
+      .then(([p, t]) => {
+        setParkings(p);
+        setTracks(t);
+        setSelectedTrackIds(new Set(t.map((tr) => tr.id)));
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const unitColors = useMemo(() => buildUnitColors(parkings), [parkings]);
+  // Las unidades que solo tienen recorrido (sin estacionamientos) también reciben color
+  const unitColors = useMemo(
+    () => buildUnitColors([...parkings, ...tracks]),
+    [parkings, tracks],
+  );
 
   // Flat groups (unit/date/address) or two-level groups (date_unit)
   const groups = useMemo(
@@ -272,6 +289,78 @@ export default function Home() {
       return true;
     });
   }, [groupFilteredParkings, filterDateFrom, filterDateTo]);
+
+  // Recorridos dentro del rango de fechas (se incluyen si se traslapan con el rango)
+  const rangeTracks = useMemo(() => {
+    if (!filterDateFrom && !filterDateTo) return tracks;
+    return tracks.filter((t) => {
+      if (filterDateFrom && localDateKey(t.end) < filterDateFrom) return false;
+      if (filterDateTo && localDateKey(t.start) > filterDateTo) return false;
+      return true;
+    });
+  }, [tracks, filterDateFrom, filterDateTo]);
+
+  const mapTracks = useMemo(
+    () =>
+      prepareTracks(
+        rangeTracks.filter((t) => selectedTrackIds.has(t.id)),
+        unitColors,
+        parkings,
+      ),
+    [rangeTracks, selectedTrackIds, unitColors, parkings],
+  );
+
+  function toggleTrack(id) {
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function setAllTracks(on) {
+    setSelectedTrackIds((prev) => {
+      const next = new Set(prev);
+      rangeTracks.forEach((t) => (on ? next.add(t.id) : next.delete(t.id)));
+      return next;
+    });
+  }
+
+  function handleTracksImported(results) {
+    const replacedTracks = new Set(results.map((r) => r.replaced_track_id).filter(Boolean));
+    const replacedParkings = new Set(results.flatMap((r) => r.replaced_parking_ids));
+    setTracks((prev) => [
+      ...results.map((r) => r.track),
+      ...prev.filter((t) => !replacedTracks.has(t.id)),
+    ]);
+    setParkings((prev) => [
+      ...results.flatMap((r) => r.parkings),
+      ...prev.filter((p) => !replacedParkings.has(p.id)),
+    ]);
+    setSelectedTrackIds((prev) => {
+      const next = new Set([...prev].filter((id) => !replacedTracks.has(id)));
+      results.forEach((r) => next.add(r.track.id));
+      return next;
+    });
+  }
+
+  async function handleDeleteTrack(t) {
+    const ok = await confirm({
+      title: `¿Eliminar el recorrido de ${t.unit_id}?`,
+      message: "Se eliminará el recorrido y los estacionamientos que se importaron con él. Esta acción no se puede deshacer.",
+    });
+    if (!ok) return;
+    try {
+      const { deleted_parking_ids } = await deleteTrack(t.id);
+      const removed = new Set(deleted_parking_ids);
+      setTracks((prev) => prev.filter((x) => x.id !== t.id));
+      setParkings((prev) => prev.filter((p) => !removed.has(p.id)));
+      if (highlightId && removed.has(highlightId)) setHighlightId(null);
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   function applyDateFilter(items) {
     if (!filterDateFrom && !filterDateTo) return items;
@@ -642,6 +731,17 @@ export default function Home() {
             <Upload size={14} /> Importar
           </button>
           <button
+            onClick={() => setShowTrackImport(true)}
+            style={{
+              ...btnOutline,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Route size={14} /> Importar rastreo
+          </button>
+          <button
             onClick={() => setShowForm(true)}
             style={{
               ...btnWhite,
@@ -790,6 +890,157 @@ export default function Home() {
                   {visibleParkings.length} registro
                   {visibleParkings.length !== 1 ? "s" : ""} en el rango
                 </p>
+              )}
+            </div>
+          )}
+
+          {/* Recorridos GPS: selector de qué unidades se trazan en el mapa */}
+          {tracks.length > 0 && (
+            <div
+              style={{
+                padding: "8px 12px 10px",
+                borderBottom: "1px solid #e2e8f0",
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button
+                  onClick={() => setTracksOpen((o) => !o)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    flex: 1,
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    padding: "2px 0",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  <Route size={13} color="#94a3b8" />
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#374151",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    Recorridos
+                  </span>
+                  <span style={badge}>
+                    {mapTracks.length}/{rangeTracks.length}
+                  </span>
+                  <ChevronDown
+                    size={13}
+                    color="#94a3b8"
+                    style={{
+                      transform: tracksOpen ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                    }}
+                  />
+                </button>
+                {tracksOpen && rangeTracks.length > 0 && (
+                  <>
+                    <button onClick={() => setAllTracks(true)} style={linkBtn}>
+                      Todos
+                    </button>
+                    <button onClick={() => setAllTracks(false)} style={linkBtn}>
+                      Ninguno
+                    </button>
+                  </>
+                )}
+              </div>
+              {tracksOpen && (
+                <div
+                  style={{
+                    marginTop: 6,
+                    maxHeight: 180,
+                    overflowY: "auto",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 3,
+                  }}
+                >
+                  {rangeTracks.length === 0 && (
+                    <p style={{ fontSize: 11, color: "#94a3b8", padding: "4px 2px" }}>
+                      Sin recorridos en el rango de fechas
+                    </p>
+                  )}
+                  {rangeTracks.map((t) => {
+                    const checked = selectedTrackIds.has(t.id);
+                    const color = unitColors[t.unit_id] || "#64748b";
+                    return (
+                      <label
+                        key={t.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "5px 8px",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          background: checked ? color + "12" : "#f8fafc",
+                          border: `1px solid ${checked ? color + "60" : "#e2e8f0"}`,
+                          fontSize: 12,
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleTrack(t.id)}
+                          style={{ accentColor: color, cursor: "pointer", margin: 0 }}
+                        />
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: color,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontWeight: 700, color: "#1e293b" }}>
+                            {t.unit_id}
+                          </span>
+                          {t.unit_name && (
+                            <span style={{ color: "#64748b" }}> · {t.unit_name}</span>
+                          )}
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: 10,
+                              color: "#94a3b8",
+                            }}
+                          >
+                            {formatDate(t.start)} → {formatTime(t.end)} ·{" "}
+                            {t.points.length} pts
+                          </span>
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDeleteTrack(t);
+                          }}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "#94a3b8",
+                            padding: "2px 4px",
+                            display: "flex",
+                          }}
+                          title="Eliminar recorrido"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </label>
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
@@ -1176,6 +1427,7 @@ export default function Home() {
               unitColors={unitColors}
               highlightId={highlightId}
               onMarkerClick={handleSelect}
+              tracks={mapTracks}
             />
           )}
           {loading && (
@@ -1217,6 +1469,12 @@ export default function Home() {
         <ImportModal
           onImported={handleImported}
           onClose={() => setShowImport(false)}
+        />
+      )}
+      {showTrackImport && (
+        <TrackImportModal
+          onImported={handleTracksImported}
+          onClose={() => setShowTrackImport(false)}
         />
       )}
       {showSharesList && (
@@ -1308,6 +1566,13 @@ function TooltipRow({ label, value }) {
   );
 }
 
+function formatTime(iso) {
+  return new Date(iso).toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function fmtDur(minutes) {
   if (!minutes) return "—";
   const h = Math.floor(minutes / 60),
@@ -1329,7 +1594,10 @@ function fmtDt(iso) {
 }
 
 function dateKey(p) {
-  const d = p.parking_start || p.created_at;
+  return localDateKey(p.parking_start || p.created_at);
+}
+
+function localDateKey(d) {
   if (!d) return null;
   const dt = new Date(d);
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
@@ -1415,6 +1683,16 @@ const dateInputStyle = {
   outline: "none",
   fontFamily: "inherit",
   cursor: "pointer",
+};
+const linkBtn = {
+  background: "none",
+  border: "none",
+  cursor: "pointer",
+  color: "#2563eb",
+  fontSize: 11,
+  fontWeight: 600,
+  padding: "2px 4px",
+  fontFamily: "inherit",
 };
 const groupPill = {
   flex: 1,

@@ -5,6 +5,7 @@ const DATA_DIR = path.join(__dirname, '..', 'data');
 const PARKINGS_FILE = path.join(DATA_DIR, 'parkings.json');
 const SHARES_FILE = path.join(DATA_DIR, 'shares.json');
 const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
+const TRACKS_FILE = path.join(DATA_DIR, 'tracks.json');
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -31,6 +32,8 @@ const db = {
   saveShares: (data) => writeJson(SHARES_FILE, data),
   getReports: () => readJson(REPORTS_FILE),
   saveReports: (data) => writeJson(REPORTS_FILE, data),
+  getTracks: () => readJson(TRACKS_FILE),
+  saveTracks: (data) => writeJson(TRACKS_FILE, data),
 };
 
 function initDb() {
@@ -38,6 +41,7 @@ function initDb() {
   if (!fs.existsSync(PARKINGS_FILE)) writeJson(PARKINGS_FILE, []);
   if (!fs.existsSync(SHARES_FILE)) writeJson(SHARES_FILE, []);
   if (!fs.existsSync(REPORTS_FILE)) writeJson(REPORTS_FILE, []);
+  if (!fs.existsSync(TRACKS_FILE)) writeJson(TRACKS_FILE, []);
   console.log('Data directory ready at', DATA_DIR);
 }
 

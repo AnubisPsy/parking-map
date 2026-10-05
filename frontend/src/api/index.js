@@ -5,7 +5,13 @@ async function request(path, options = {}) {
     headers: { 'Content-Type': 'application/json' },
     ...options
   });
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    // Respuesta vacía o no-JSON: normalmente el backend no está corriendo
+    throw new Error(`No se pudo conectar con el servidor (${res.status}). ¿Está corriendo el backend?`);
+  }
   if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
   return data;
 }
@@ -46,3 +52,11 @@ export const createReport = (body) =>
 
 export const deleteReport = (id) =>
   request(`/reports/${id}`, { method: 'DELETE' });
+
+export const fetchTracks = () => request('/tracks');
+
+export const createTrack = (body) =>
+  request('/tracks', { method: 'POST', body: JSON.stringify(body) });
+
+export const deleteTrack = (id) =>
+  request(`/tracks/${id}`, { method: 'DELETE' });

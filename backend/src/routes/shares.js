@@ -54,6 +54,10 @@ router.post('/', (req, res) => {
   const snapshot = Array.isArray(unit_ids)
     ? allParkings.filter(p => unit_ids.includes(p.unit_id))
     : allParkings;
+  const allTracks = db.getTracks();
+  const tracksSnapshot = Array.isArray(unit_ids)
+    ? allTracks.filter(t => unit_ids.includes(t.unit_id))
+    : allTracks;
 
   const share = {
     id: uuidv4(),
@@ -63,6 +67,7 @@ router.post('/', (req, res) => {
     expires_at: expiresAt,
     created_at: new Date().toISOString(),
     snapshot,
+    tracks_snapshot: tracksSnapshot,
   };
 
   const shares = db.getShares();
@@ -111,6 +116,7 @@ router.get('/:token', (req, res) => {
     expires_at: share.expires_at,
     unit_ids: share.unit_ids,
     parkings: parkings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)),
+    tracks: share.tracks_snapshot || [],
   });
 });
 

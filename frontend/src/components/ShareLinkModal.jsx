@@ -1,21 +1,9 @@
 import { useState } from 'react';
-import { createShareLink } from '../api';
-import { Link2, CheckCircle2, Copy, Check, ExternalLink } from 'lucide-react';
-
-function copyToClipboard(text) {
-  if (navigator.clipboard && window.isSecureContext) {
-    return navigator.clipboard.writeText(text);
-  }
-  const el = document.createElement('textarea');
-  el.value = text;
-  el.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
-  document.body.appendChild(el);
-  el.focus();
-  el.select();
-  try { document.execCommand('copy'); } catch {}
-  document.body.removeChild(el);
-  return Promise.resolve();
-}
+import { useCreateShareLink } from '../api/queries';
+import { Link2, CheckCircle2, Copy, Check, ExternalLink, X } from 'lucide-react';
+import { copyToClipboard } from '../lib/clipboard';
+import { formatDateTime } from '../lib/format';
+import Modal from './ui/Modal';
 
 const DURATIONS = [
   { label: '15 minutos', value: 15 },
@@ -37,7 +25,8 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
   const [duration, setDuration] = useState(60);
   const [customMin, setCustomMin] = useState('');
   const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const createLink = useCreateShareLink();
+  const loading = createLink.isPending;
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [includeGroupBy, setIncludeGroupBy] = useState(!!groupBy && groupBy !== 'unit');
@@ -59,9 +48,8 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
     const mins = getMinutes();
     if (!mins || isNaN(mins) || mins < 1) return setError('Duración inválida');
     if (mode === 'select' && selected.length === 0) return setError('Selecciona al menos una unidad');
-    setLoading(true);
     try {
-      const data = await createShareLink({
+      const data = await createLink.mutateAsync({
         unit_ids: mode === 'all' ? null : selected,
         expires_in_minutes: mins,
       });
@@ -74,8 +62,6 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
       setResult({ url: qs ? `${base}?${qs}` : base, expires_at: data.expires_at });
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -85,19 +71,13 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const expiry = result
-    ? new Date(result.expires_at).toLocaleString('es-MX', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-      })
-    : '';
+  const expiry = result ? formatDateTime(result.expires_at) : '';
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <Modal label="Generar enlace compartido" onClose={onClose} style={{ maxWidth: 500 }}>
         <div style={header}>
           <h2 style={{ fontSize: 18, fontWeight: 700 }}>Generar Enlace Compartido</h2>
-          <button onClick={onClose} style={closeBtn}>✕</button>
+          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
         </div>
 
         <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -106,11 +86,11 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
               {/* Unidades */}
               <div>
                 <p style={sectionLabel}>Unidades a incluir</p>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <button style={mode === 'all' ? chipActive : chip} onClick={() => setMode('all')}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                  <button style={mode === 'all' ? chipActive : chip} aria-pressed={mode === 'all'} onClick={() => setMode('all')}>
                     Todas las unidades
                   </button>
-                  <button style={mode === 'select' ? chipActive : chip} onClick={() => setMode('select')}>
+                  <button style={mode === 'select' ? chipActive : chip} aria-pressed={mode === 'select'} onClick={() => setMode('select')}>
                     Seleccionar unidades
                   </button>
                 </div>
@@ -118,7 +98,7 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                 {mode === 'select' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 180, overflowY: 'auto' }}>
                     {units.length === 0 && (
-                      <p style={{ color: '#94a3b8', fontSize: 13 }}>No hay unidades registradas</p>
+                      <p style={{ color: '#64748b', fontSize: 13 }}>No hay unidades registradas</p>
                     )}
                     {units.map(u => (
                       <label key={u.id} style={checkRow}>
@@ -127,7 +107,7 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                           style={{ accentColor: '#2563eb', width: 16, height: 16 }} />
                         <span style={{ fontWeight: 600 }}>{u.id}</span>
                         {u.name && <span style={{ color: '#64748b', fontSize: 13 }}>— {u.name}</span>}
-                        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#94a3b8' }}>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#64748b' }}>
                           {u.count} registro{u.count !== 1 ? 's' : ''}
                         </span>
                       </label>
@@ -144,6 +124,7 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                     <button
                       key={d.value}
                       style={duration === d.value ? chipActive : chip}
+                      aria-pressed={duration === d.value}
                       onClick={() => setDuration(d.value)}
                     >
                       {d.label}
@@ -156,6 +137,7 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                       type="number" min="1" max="10080"
                       value={customMin} onChange={e => setCustomMin(e.target.value)}
                       placeholder="ej: 90"
+                      aria-label="Vigencia en minutos"
                       style={{ ...inputSt, width: 100 }}
                     />
                     <span style={{ fontSize: 13, color: '#64748b' }}>minutos</span>
@@ -173,11 +155,11 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                           style={{ accentColor: '#2563eb', width: 15, height: 15, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ fontWeight: 600, fontSize: 13 }}>Agrupación</span>
-                          <span style={{ fontSize: 12, color: includeGroupBy ? '#2563eb' : '#94a3b8', marginLeft: 8 }}>
+                          <span style={{ fontSize: 12, color: includeGroupBy ? '#2563eb' : '#64748b', marginLeft: 8 }}>
                             {GROUP_LABELS[groupBy]}
                           </span>
                         </div>
-                        <span style={{ fontSize: 11, color: includeGroupBy ? '#16a34a' : '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: includeGroupBy ? '#15803d' : '#64748b', fontWeight: 600, flexShrink: 0 }}>
                           {includeGroupBy ? 'Incluido' : 'Manual'}
                         </span>
                       </label>
@@ -188,11 +170,11 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
                           style={{ accentColor: '#2563eb', width: 15, height: 15, flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ fontWeight: 600, fontSize: 13 }}>Fechas</span>
-                          <span style={{ fontSize: 12, color: includeDates ? '#2563eb' : '#94a3b8', marginLeft: 8 }}>
+                          <span style={{ fontSize: 12, color: includeDates ? '#2563eb' : '#64748b', marginLeft: 8 }}>
                             {dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : dateFrom ? `desde ${dateFrom}` : `hasta ${dateTo}`}
                           </span>
                         </div>
-                        <span style={{ fontSize: 11, color: includeDates ? '#16a34a' : '#94a3b8', fontWeight: 600, flexShrink: 0 }}>
+                        <span style={{ fontSize: 11, color: includeDates ? '#15803d' : '#64748b', fontWeight: 600, flexShrink: 0 }}>
                           {includeDates ? 'Incluido' : 'Manual'}
                         </span>
                       </label>
@@ -215,7 +197,7 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ textAlign: 'center', paddingBottom: 8 }}>
-                <CheckCircle2 size={44} color="#16a34a" style={{ marginBottom: 8 }} />
+                <CheckCircle2 size={44} color="#15803d" style={{ marginBottom: 8 }} />
                 <p style={{ fontWeight: 700, fontSize: 16 }}>Enlace generado correctamente</p>
                 <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>
                   Expira el {expiry}
@@ -245,27 +227,17 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
-const overlay = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 9999, padding: 20
-};
-const modal = {
-  background: 'white', borderRadius: 14, width: '100%', maxWidth: 500,
-  maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-};
 const header = {
   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   padding: '20px 24px', borderBottom: '1px solid #e2e8f0'
 };
 const closeBtn = {
-  background: 'none', border: 'none', fontSize: 18, cursor: 'pointer',
-  color: '#64748b', padding: 4, borderRadius: 6
+  background: 'none', border: 'none', cursor: 'pointer',
+  color: '#64748b', padding: 4, borderRadius: 6, display: 'flex'
 };
 const sectionLabel = { fontSize: 13, fontWeight: 700, color: '#374151', marginBottom: 10 };
 const chip = {
@@ -285,7 +257,7 @@ const inputSt = {
   fontSize: 14, fontFamily: 'inherit', outline: 'none'
 };
 const errorBox = {
-  background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626',
+  background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c',
   borderRadius: 8, padding: '10px 14px', fontSize: 13
 };
 const btnPri = {

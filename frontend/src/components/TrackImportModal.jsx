@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { createTrack } from '../api';
 import { Route, FileSpreadsheet, CheckCircle2, AlertTriangle, X, Trash2 } from 'lucide-react';
 import { parseTrackWorkbook } from '../utils/excelParse';
+import Modal from './ui/Modal';
 
 function fmtTime(iso) {
   return new Date(iso).toLocaleString('es-MX', {
@@ -73,13 +74,12 @@ export default function TrackImportModal({ onImported, onClose }) {
   }
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <Modal label="Importar rastreo GPS" onClose={onClose} style={modal}>
         <div style={modalHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700 }}>
             <Route size={18} /> Importar rastreo GPS
-          </div>
-          <button onClick={onClose} style={closeBtn}><X size={18} /></button>
+          </h2>
+          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
         </div>
 
         <div style={modalBody}>
@@ -94,14 +94,14 @@ export default function TrackImportModal({ onImported, onClose }) {
 
           {phase === 'pick' && (
             <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-              <FileSpreadsheet size={48} color="#94a3b8" style={{ marginBottom: 16 }} />
-              <p style={{ color: '#64748b', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
+              <FileSpreadsheet size={48} color="#64748b" style={{ marginBottom: 16 }} />
+              <p style={{ color: '#475569', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
                 Selecciona uno o varios archivos <strong>.xlsx</strong> de rastreo con las hojas:
               </p>
-              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 4, fontFamily: 'monospace' }}>
+              <p style={{ color: '#475569', fontSize: 12, marginBottom: 4, fontFamily: 'monospace' }}>
                 Rastro: No. · Placa · Sucursal · Coordenadas · Hora
               </p>
-              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 24, fontFamily: 'monospace' }}>
+              <p style={{ color: '#475569', fontSize: 12, marginBottom: 24, fontFamily: 'monospace' }}>
                 Estacionamientos: No. · Placa · Sucursal · Duración · Coordenadas · Hora
               </p>
               <button onClick={() => inputRef.current?.click()} style={btnPrimary}>
@@ -112,13 +112,14 @@ export default function TrackImportModal({ onImported, onClose }) {
 
           {phase === 'preview' && (
             <>
-              <div style={{ maxHeight: 340, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+              <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
-                      {['Archivo', 'Unidad', 'Recorrido', 'Puntos', 'Paradas', ''].map(h => (
+                      {['Archivo', 'Unidad', 'Recorrido', 'Puntos', 'Paradas'].map(h => (
                         <th key={h} style={thStyle}>{h}</th>
                       ))}
+                      <th style={thStyle}><span className="sr-only">Acciones</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -137,13 +138,13 @@ export default function TrackImportModal({ onImported, onClose }) {
                             <td style={tdStyle}>{f.data.stops.length}</td>
                           </>
                         ) : (
-                          <td colSpan={4} style={{ ...tdStyle, color: '#dc2626' }}>
+                          <td colSpan={4} style={{ ...tdStyle, color: '#b91c1c' }}>
                             <AlertTriangle size={12} style={{ verticalAlign: -2, marginRight: 4 }} />
                             {f.error}
                           </td>
                         )}
                         <td style={tdStyle}>
-                          <button onClick={() => removeFile(i)} style={iconBtn} title="Quitar">
+                          <button onClick={() => removeFile(i)} style={iconBtn} title="Quitar" aria-label={`Quitar ${f.fileName}`}>
                             <Trash2 size={13} />
                           </button>
                         </td>
@@ -152,10 +153,10 @@ export default function TrackImportModal({ onImported, onClose }) {
                   </tbody>
                 </table>
               </div>
-              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>
+              <p style={{ fontSize: 12, color: '#475569', marginTop: 10 }}>
                 Si un recorrido ya fue importado (misma unidad y mismo rango de horas) se reemplaza junto con sus estacionamientos.
               </p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', marginTop: 16 }}>
                 <button onClick={() => inputRef.current?.click()} style={btnOutline}>
                   Agregar más archivos
                 </button>
@@ -170,7 +171,7 @@ export default function TrackImportModal({ onImported, onClose }) {
           )}
 
           {phase === 'importing' && (
-            <div style={{ textAlign: 'center', padding: '40px 16px', color: '#64748b', fontSize: 14 }}>
+            <div role="status" style={{ textAlign: 'center', padding: '40px 16px', color: '#475569', fontSize: 14 }}>
               Guardando recorridos...
             </div>
           )}
@@ -180,10 +181,10 @@ export default function TrackImportModal({ onImported, onClose }) {
               {results.map((r, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '6px 0', color: '#374151' }}>
                   {r.ok
-                    ? <CheckCircle2 size={16} color="#16a34a" />
-                    : <AlertTriangle size={16} color="#dc2626" />}
+                    ? <CheckCircle2 size={16} color="#15803d" />
+                    : <AlertTriangle size={16} color="#b91c1c" />}
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fileName}</span>
-                  <span style={{ color: r.ok ? '#64748b' : '#dc2626', flexShrink: 0 }}>
+                  <span style={{ color: r.ok ? '#475569' : '#b91c1c', flexShrink: 0 }}>
                     {r.ok
                       ? `${r.res.track.points.length} puntos · ${r.res.parkings.length} paradas${r.replaced ? ' (reemplazado)' : ''}`
                       : r.error}
@@ -196,19 +197,11 @@ export default function TrackImportModal({ onImported, onClose }) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
-const overlay = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
-};
-const modal = {
-  background: 'white', borderRadius: 16, width: '92%', maxWidth: 780,
-  boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
-};
+const modal = { borderRadius: 16, maxWidth: 780 };
 const modalHeader = {
   padding: '16px 20px',
   background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
@@ -218,7 +211,7 @@ const modalHeader = {
 const modalBody = { padding: '20px 24px' };
 const closeBtn = {
   background: 'none', border: 'none', color: 'white',
-  fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 0,
+  cursor: 'pointer', padding: 0, display: 'flex', borderRadius: 4,
 };
 const btnPrimary = {
   padding: '10px 20px', background: '#2563eb', color: 'white',
@@ -230,8 +223,8 @@ const btnOutline = {
   fontWeight: 600, cursor: 'pointer',
 };
 const iconBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
-  display: 'flex', padding: 2,
+  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
+  display: 'flex', padding: 2, borderRadius: 4,
 };
 const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 12 };
 const thStyle = {

@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Polyline, CircleMarker, Marker, Tooltip, Pane, useMap } from 'react-leaflet';
+import { Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   Play, Pause, SkipBack, SkipForward, StepBack, StepForward,
@@ -9,31 +9,6 @@ import {
 const SPEEDS = [1, 10, 30, 60, 120, 300, 600];
 
 // ── Utilidades de recorrido ─────────────────────────────────────────
-
-// Convierte tracks del backend al formato que usa el reproductor.
-// `stops` son los estacionamientos (parkings) que se importaron con el recorrido.
-export function prepareTracks(tracks, unitColors, parkings) {
-  return tracks.map(t => {
-    const pts = t.points.map(p => ({ lat: p.lat, lng: p.lng, ms: new Date(p.t).getTime() }));
-    const stops = parkings
-      .filter(p => p.track_id === t.id && p.parking_start)
-      .map(p => {
-        const ms = new Date(p.parking_start).getTime();
-        return { ms, endMs: ms + (p.parking_duration || 0) * 60000, duration: p.parking_duration || 0 };
-      })
-      .sort((a, b) => a.ms - b.ms);
-    return {
-      id: t.id,
-      unit_id: t.unit_id,
-      label: t.unit_name ? `${t.unit_id} · ${t.unit_name}` : t.unit_id,
-      color: unitColors[t.unit_id] || '#64748b',
-      pts,
-      stops,
-      startMs: pts[0].ms,
-      endMs: pts[pts.length - 1].ms,
-    };
-  });
-}
 
 function distanceM(a, b) {
   const R = 6371000, rad = Math.PI / 180;
@@ -159,8 +134,57 @@ export function usePlayback(tracks) {
 
 // ── Capas del mapa ─────────────────────────────────────────────────
 
-// Rutas completas (tenues) + puntos GPS con su hora. No dependen del tiempo,
-// por eso van memorizadas y no se redibujan en cada cuadro de la animación.
+function pointTooltip(track, point, suffix) {
+  const box = document.createElement('div');
+  box.style.fontSize = '12px';
+  const unit = document.createElement('strong');
+  unit.textContent = track.unit_id;
+  box.append(unit, suffix, document.createElement('br'), `${fmtDay(point.ms)} · ${fmtClock(point.ms)}`);
+  return box;
+}
+
+// Puntos GPS con su hora, dibujados en canvas: un recorrido trae miles y como
+// elementos SVG con un componente React cada uno volverían lento todo el mapa.
+function TrackPoints({ tracks, onSeek }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!map.getPane('track-points')) map.createPane('track-points').style.zIndex = 450;
+    const renderer = L.canvas({ pane: 'track-points' });
+    const group = L.featureGroup();
+
+    tracks.forEach((t) => {
+      t.pts.forEach((p, i) => {
+        const isStart = i === 0;
+        const isEnd = i === t.pts.length - 1;
+        const accent = isStart ? '#15803d' : isEnd ? '#b91c1c' : null;
+        const suffix = isStart ? ' · Inicio' : isEnd ? ' · Fin' : '';
+        L.circleMarker([p.lat, p.lng], {
+          renderer,
+          radius: accent ? 6 : 3,
+          color: accent || t.color,
+          fillColor: accent || 'white',
+          fillOpacity: 1,
+          weight: accent ? 2 : 1.5,
+        })
+          .on('click', () => onSeek(p.ms))
+          .bindTooltip(() => pointTooltip(t, p, suffix), { direction: 'top', offset: [0, -4] })
+          .addTo(group);
+      });
+    });
+
+    group.addTo(map);
+    return () => {
+      map.removeLayer(group);
+      map.removeLayer(renderer);
+    };
+  }, [map, tracks, onSeek]);
+
+  return null;
+}
+
+// Rutas completas (tenues) + puntos GPS. No dependen del tiempo, por eso van
+// memorizadas y no se redibujan en cada cuadro de la animación.
 export const TrackStaticLayers = memo(function TrackStaticLayers({ tracks, onSeek }) {
   return (
     <>
@@ -171,37 +195,17 @@ export const TrackStaticLayers = memo(function TrackStaticLayers({ tracks, onSee
           pathOptions={{ color: t.color, weight: 4, opacity: 0.35 }}
         />
       ))}
-      <Pane name="track-points" style={{ zIndex: 450 }}>
-        {tracks.map(t => t.pts.map((p, i) => {
-          const isStart = i === 0, isEnd = i === t.pts.length - 1;
-          return (
-            <CircleMarker
-              key={`${t.id}-${i}`}
-              center={[p.lat, p.lng]}
-              radius={isStart || isEnd ? 6 : 3}
-              pathOptions={{
-                color: isStart ? '#16a34a' : isEnd ? '#dc2626' : t.color,
-                fillColor: isStart ? '#16a34a' : isEnd ? '#dc2626' : 'white',
-                fillOpacity: 1,
-                weight: isStart || isEnd ? 2 : 1.5,
-              }}
-              eventHandlers={{ click: () => onSeek(p.ms) }}
-            >
-              <Tooltip direction="top" offset={[0, -4]}>
-                <div style={{ fontSize: 12 }}>
-                  <strong>{t.unit_id}</strong>
-                  {isStart && ' · Inicio'}{isEnd && ' · Fin'}
-                  <br />
-                  {fmtDay(p.ms)} · {fmtClock(p.ms)}
-                </div>
-              </Tooltip>
-            </CircleMarker>
-          );
-        }))}
-      </Pane>
+      <TrackPoints tracks={tracks} onSeek={onSeek} />
     </>
   );
 });
+
+// El identificador viene de un Excel importado y este HTML no pasa por React
+function escapeHtml(text) {
+  const box = document.createElement('div');
+  box.textContent = text;
+  return box.innerHTML;
+}
 
 function vehicleIcon(color, label) {
   return L.divIcon({
@@ -211,7 +215,7 @@ function vehicleIcon(color, label) {
     html: `<div style="position:relative;width:28px;height:28px">
       <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);background:${color};color:white;
         font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;white-space:nowrap;
-        box-shadow:0 1px 4px rgba(0,0,0,.35)">${label}</div>
+        box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(label)}</div>
       <div style="width:28px;height:28px;border-radius:50%;background:${color};border:3px solid white;
         box-shadow:0 2px 8px rgba(0,0,0,.45);box-sizing:border-box;display:flex;align-items:center;justify-content:center">
         <svg class="vehicle-arrow" width="14" height="14" viewBox="0 0 24 24" style="transition:transform .2s">
@@ -275,7 +279,8 @@ export function TrackDynamicLayers({ tracks, time, followTrack }) {
 
 export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
   const { range, time, playing, setPlaying, speed, setSpeed, seek, togglePlay } = playback;
-  const [minimized, setMinimized] = useState(false);
+  // En móvil el panel taparía casi todo el mapa: arranca minimizado
+  const [minimized, setMinimized] = useState(() => window.matchMedia('(max-width: 820px)').matches);
 
   // Todos los instantes con punto GPS, para avanzar/retroceder punto a punto
   const pointTimes = useMemo(
@@ -300,7 +305,7 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
 
   if (minimized) {
     return (
-      <button onClick={() => setMinimized(false)} style={{ ...panelBase, ...minimizedBtn }}>
+      <button onClick={() => setMinimized(false)} style={{ ...panelBase, ...minimizedBtn }} aria-label={`Abrir reproductor, ${fmtClock(time)}`}>
         <Route size={15} color="#2563eb" />
         <span style={{ fontWeight: 700 }}>{fmtClock(time)}</span>
         {playing ? <Pause size={14} /> : <Play size={14} />}
@@ -316,7 +321,7 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
           {fmtClock(time)}
         </span>
         <span style={{ fontSize: 12, color: '#64748b', textTransform: 'capitalize' }}>{fmtDay(time)}</span>
-        <button onClick={() => setMinimized(true)} style={{ ...iconBtn, marginLeft: 'auto' }} title="Minimizar">
+        <button onClick={() => setMinimized(true)} style={{ ...iconBtn, marginLeft: 'auto' }} title="Minimizar" aria-label="Minimizar reproductor">
           <Minimize2 size={14} />
         </button>
       </div>
@@ -332,13 +337,15 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
               <span style={{ fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {t.label}
               </span>
-              <span style={{ marginLeft: 'auto', color: st.moving ? '#16a34a' : '#64748b', fontWeight: st.moving ? 700 : 500, flexShrink: 0 }}>
+              <span style={{ marginLeft: 'auto', color: st.moving ? '#15803d' : '#64748b', fontWeight: st.moving ? 700 : 500, flexShrink: 0 }}>
                 {st.text}
               </span>
               <button
                 onClick={() => setFollowId(following ? null : t.id)}
-                style={{ ...iconBtn, color: following ? '#2563eb' : '#cbd5e1' }}
+                style={{ ...iconBtn, color: following ? '#2563eb' : '#64748b' }}
                 title={following ? 'Dejar de seguir' : 'Seguir esta unidad'}
+                aria-label={`Seguir a ${t.unit_id}`}
+                aria-pressed={following}
               >
                 <Crosshair size={14} />
               </button>
@@ -347,15 +354,19 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
         })}
       </div>
 
-      {/* Línea de tiempo con las paradas marcadas */}
+      {/* Línea de tiempo con las paradas marcadas. Atajo solo para ratón:
+          con teclado se llega con "Parada anterior" y "Parada siguiente". */}
       <div style={{ position: 'relative', height: 10, marginBottom: 2 }}>
         {tracks.flatMap(t => t.stops.map((s, i) => (
-          <div
+          <button
             key={`${t.id}-${i}`}
             onClick={() => { setPlaying(false); seek(s.ms); }}
             title={`${t.unit_id} · Estacionado ${fmtDur(s.duration)} desde ${fmtClock(s.ms)}`}
+            tabIndex={-1}
+            aria-hidden="true"
             style={{
               position: 'absolute', top: 2, height: 6, borderRadius: 3, cursor: 'pointer',
+              border: 'none', padding: 0,
               left: `${((s.ms - range.min) / span) * 100}%`,
               width: `max(4px, ${((Math.min(s.endMs, range.max) - s.ms) / span) * 100}%)`,
               background: t.color, opacity: 0.55,
@@ -370,29 +381,32 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
         step={1000}
         value={time}
         onChange={e => seek(Number(e.target.value))}
+        aria-label="Línea de tiempo"
+        aria-valuetext={`${fmtDay(time)} ${fmtClock(time)}`}
         style={{ width: '100%', accentColor: '#2563eb', cursor: 'pointer', margin: 0 }}
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#94a3b8', marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#475569', marginBottom: 8 }}>
         <span>{fmtDay(range.min)} {fmtClock(range.min)}</span>
         <span>{fmtDay(range.max)} {fmtClock(range.max)}</span>
       </div>
 
       {/* Controles */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button onClick={() => { setPlaying(false); seek(range.min); }} style={ctrlBtn} title="Ir al inicio"><SkipBack size={15} /></button>
-        <button onClick={() => jump(stopTimes, -1)} style={ctrlBtn} title="Parada anterior" disabled={!stopTimes.length}><ChevronsLeft size={16} /></button>
-        <button onClick={() => jump(pointTimes, -1)} style={ctrlBtn} title="Punto anterior"><StepBack size={15} /></button>
-        <button onClick={togglePlay} style={playBtn} title={playing ? 'Pausar' : 'Reproducir'}>
+        <button onClick={() => { setPlaying(false); seek(range.min); }} style={ctrlBtn} title="Ir al inicio" aria-label="Ir al inicio"><SkipBack size={15} /></button>
+        <button onClick={() => jump(stopTimes, -1)} style={ctrlBtn} title="Parada anterior" aria-label="Parada anterior" disabled={!stopTimes.length}><ChevronsLeft size={16} /></button>
+        <button onClick={() => jump(pointTimes, -1)} style={ctrlBtn} title="Punto anterior" aria-label="Punto anterior"><StepBack size={15} /></button>
+        <button onClick={togglePlay} style={playBtn} title={playing ? 'Pausar' : 'Reproducir'} aria-label={playing ? 'Pausar' : 'Reproducir'}>
           {playing ? <Pause size={18} /> : <Play size={18} />}
         </button>
-        <button onClick={() => jump(pointTimes, 1)} style={ctrlBtn} title="Punto siguiente"><StepForward size={15} /></button>
-        <button onClick={() => jump(stopTimes, 1)} style={ctrlBtn} title="Parada siguiente" disabled={!stopTimes.length}><ChevronsRight size={16} /></button>
-        <button onClick={() => { setPlaying(false); seek(range.max); }} style={ctrlBtn} title="Ir al final"><SkipForward size={15} /></button>
+        <button onClick={() => jump(pointTimes, 1)} style={ctrlBtn} title="Punto siguiente" aria-label="Punto siguiente"><StepForward size={15} /></button>
+        <button onClick={() => jump(stopTimes, 1)} style={ctrlBtn} title="Parada siguiente" aria-label="Parada siguiente" disabled={!stopTimes.length}><ChevronsRight size={16} /></button>
+        <button onClick={() => { setPlaying(false); seek(range.max); }} style={ctrlBtn} title="Ir al final" aria-label="Ir al final"><SkipForward size={15} /></button>
         <select
           value={speed}
           onChange={e => setSpeed(Number(e.target.value))}
           style={speedSelect}
           title="Velocidad de reproducción"
+          aria-label="Velocidad de reproducción"
         >
           {SPEEDS.map(s => <option key={s} value={s}>{s}x</option>)}
         </select>
@@ -412,7 +426,7 @@ const minimizedBtn = {
   cursor: 'pointer', fontSize: 13, color: '#1e293b',
 };
 const iconBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
   display: 'flex', padding: 2, borderRadius: 4,
 };
 const ctrlBtn = {

@@ -1,74 +1,11 @@
-import { memo, useEffect, useMemo, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import L from 'leaflet';
-import { Layers, Check } from 'lucide-react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import MapTypePicker, { MAP_TYPES } from './MapTypePicker';
+import ParkingLayer from './ParkingLayer';
 import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel } from './TrackPlayback';
 
-const MAP_TYPES = [
-  {
-    id: 'hybrid',
-    label: 'Híbrido',
-    url: 'https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-    attr: '© Google',
-    subdomains: ['0', '1', '2', '3'],
-  },
-  {
-    id: 'satellite',
-    label: 'Satélite',
-    url: 'https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-    attr: '© Google',
-    subdomains: ['0', '1', '2', '3'],
-  },
-  {
-    id: 'osm',
-    label: 'Estándar',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    subdomains: ['a', 'b', 'c'],
-  },
-];
-
-const COLORS = [
-  '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
-  '#0891b2', '#be185d', '#15803d', '#b45309', '#4338ca',
-  '#0284c7', '#c2410c', '#166534', '#a16207', '#6d28d9',
-];
-
-// Pin blanco con borde y "P" del color de la unidad, para distinguirlo de las
-// líneas de ruta (que usan el mismo color en sólido). Seleccionado: relleno ámbar.
-function createPinIcon(color, highlighted = false) {
-  const fill = highlighted ? '#f59e0b' : 'white';
-  const accent = highlighted ? 'white' : color;
-  const svg = `<svg width="28" height="36" viewBox="-1.5 -1.5 31 39" xmlns="http://www.w3.org/2000/svg">
-    <path d="M14 0C6.268 0 0 6.268 0 14c0 9.9 12.43 21.49 12.96 22.01a1.4 1.4 0 002.08 0C15.57 35.49 28 23.9 28 14 28 6.268 21.732 0 14 0z"
-      fill="${fill}" stroke="${highlighted ? '#b45309' : color}" stroke-width="3"/>
-    <text x="14" y="19.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="900" fill="${accent}">P</text>
-  </svg>`;
-  return L.divIcon({
-    html: svg,
-    className: '',
-    iconSize: [28, 36],
-    iconAnchor: [14, 36],
-    popupAnchor: [0, -38],
-  });
-}
-
-function formatDuration(minutes) {
-  if (!minutes) return '—';
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  if (h === 0) return `${m}min`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}min`;
-}
-
-function formatDate(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('es-MX', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  });
-}
+const NO_TRACKS = [];
 
 function FitBounds({ parkings, tracks }) {
   const map = useMap();
@@ -83,39 +20,17 @@ function FitBounds({ parkings, tracks }) {
   return null;
 }
 
-function FlyToMarker({ parkings, highlightId }) {
-  const map = useMap();
-  const parkingsRef = useRef(parkings);
-  parkingsRef.current = parkings;
-  useEffect(() => {
-    if (!highlightId) return;
-    const p = parkingsRef.current.find(item => item.id === highlightId);
-    if (!p) return;
-    map.flyTo([p.latitude, p.longitude], Math.max(map.getZoom(), 15), { duration: 0.7 });
-  }, [highlightId, map]);
-  return null;
-}
-
 // `tracks` llega ya preparado con prepareTracks() (puntos en ms, color y paradas)
-export default function MapView({ parkings, unitColors, highlightId, onMarkerClick, tracks = [] }) {
+export default function MapView({ parkings: latestParkings, unitColors: latestColors, highlightId, onMarkerClick, tracks: latestTracks = NO_TRACKS }) {
+  // Con muchos marcadores Leaflet tarda en actualizarse: la lista responde primero y el mapa después
+  const parkings = useDeferredValue(latestParkings);
+  const unitColors = useDeferredValue(latestColors);
+  const tracks = useDeferredValue(latestTracks);
   const [mapType, setMapType] = useState('hybrid');
   const playback = usePlayback(tracks);
   const [followId, setFollowId] = useState(null);
   const followTrack = tracks.find(t => t.id === followId) || null;
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerRef = useRef(null);
   const current = MAP_TYPES.find(t => t.id === mapType);
-
-  useEffect(() => {
-    if (!pickerOpen) return;
-    function handleOutside(e) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
-        setPickerOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [pickerOpen]);
 
   const center = useMemo(() => {
     if (!parkings.length) return [15.7764, -86.7920]; // La Ceiba, Honduras
@@ -138,9 +53,8 @@ export default function MapView({ parkings, unitColors, highlightId, onMarkerCli
           subdomains={current.subdomains}
         />
         {(parkings.length > 0 || tracks.length > 0) && <FitBounds parkings={parkings} tracks={tracks} />}
-        <FlyToMarker parkings={parkings} highlightId={highlightId} />
         <TrackStaticLayers tracks={tracks} onSeek={playback.seek} />
-        <ParkingMarkers
+        <ParkingLayer
           parkings={parkings}
           unitColors={unitColors}
           highlightId={highlightId}
@@ -153,123 +67,7 @@ export default function MapView({ parkings, unitColors, highlightId, onMarkerCli
         <PlaybackPanel tracks={tracks} playback={playback} followId={followId} setFollowId={setFollowId} />
       )}
 
-      {/* Map type switcher */}
-      <div ref={pickerRef} style={{ position: 'absolute', top: 10, right: 10, zIndex: 1000 }}>
-        <button
-          onClick={() => setPickerOpen(o => !o)}
-          title="Tipo de mapa"
-          style={{
-            background: pickerOpen ? '#2563eb' : 'white',
-            border: 'none',
-            borderRadius: 8,
-            padding: '7px 9px',
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Layers size={18} color={pickerOpen ? 'white' : '#374151'} />
-        </button>
-
-        {pickerOpen && (
-          <div style={{
-            position: 'absolute',
-            top: 'calc(100% + 6px)',
-            right: 0,
-            background: 'white',
-            borderRadius: 10,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.18)',
-            overflow: 'hidden',
-            minWidth: 130,
-          }}>
-            {MAP_TYPES.map((t, i) => (
-              <button
-                key={t.id}
-                onClick={() => { setMapType(t.id); setPickerOpen(false); }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '9px 14px',
-                  width: '100%',
-                  background: mapType === t.id ? '#eff6ff' : 'white',
-                  color: mapType === t.id ? '#2563eb' : '#374151',
-                  border: 'none',
-                  borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: mapType === t.id ? 700 : 400,
-                  textAlign: 'left',
-                  fontFamily: 'inherit',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <span style={{ width: 14, display: 'flex', alignItems: 'center' }}>
-                  {mapType === t.id && <Check size={13} />}
-                </span>
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Memorizado: durante la reproducción MapView se re-renderiza en cada cuadro
-const ParkingMarkers = memo(function ParkingMarkers({ parkings, unitColors, highlightId, onMarkerClick }) {
-  return (
-    <>
-      {parkings.map((p) => {
-        const color = unitColors[p.unit_id] || '#64748b';
-        const icon = createPinIcon(color, highlightId === p.id);
-        return (
-          <Marker
-            key={p.id}
-            position={[p.latitude, p.longitude]}
-            icon={icon}
-            eventHandlers={{ click: () => onMarkerClick?.(p.id) }}
-          >
-            <Popup>
-              <div style={{ fontFamily: 'inherit', minWidth: 220 }}>
-                <div style={{
-                  background: color,
-                  color: 'white',
-                  padding: '10px 14px',
-                  borderRadius: '10px 10px 0 0',
-                  fontWeight: 700,
-                  fontSize: 15
-                }}>
-                  {p.unit_name || p.unit_id}
-                </div>
-                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <Row label="ID Unidad" value={p.unit_id} />
-                  <Row label="Tiempo estacionado" value={formatDuration(p.parking_duration)} />
-                  <Row label="Inicio" value={formatDate(p.parking_start)} />
-                  <Row label="Coordenadas" value={`${p.latitude.toFixed(6)}, ${p.longitude.toFixed(6)}`} />
-                  {p.address && <Row label="Dirección" value={p.address} />}
-                  {p.notes && <Row label="Notas" value={p.notes} />}
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                    Registrado: {formatDate(p.created_at)}
-                  </div>
-                </div>
-              </div>
-            </Popup>
-          </Marker>
-        );
-      })}
-    </>
-  );
-});
-
-function Row({ label, value }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13 }}>
-      <span style={{ color: '#64748b', flexShrink: 0 }}>{label}</span>
-      <span style={{ fontWeight: 500, textAlign: 'right', wordBreak: 'break-all' }}>{value}</span>
+      <MapTypePicker value={mapType} onChange={setMapType} />
     </div>
   );
 }

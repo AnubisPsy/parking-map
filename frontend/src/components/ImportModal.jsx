@@ -1,17 +1,23 @@
 import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { createParkingsBulk } from '../api';
+import { useImportParkings } from '../api/queries';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, X } from 'lucide-react';
 import { readSheetRows, parseParkingRow } from '../utils/excelParse';
+import { formatDateTime, formatDuration } from '../lib/format';
+import DataTable from './ui/DataTable';
+import Modal from './ui/Modal';
 
-function fmtDuration(min) {
-  if (!min) return '—';
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h > 0 ? `${h}h ${m}min` : `${m}min`;
-}
+const PREVIEW_COLUMNS = [
+  { key: 'unit_id', label: 'No.', width: 80 },
+  { key: 'unit_name', label: 'Placa', width: 100 },
+  { key: 'address', label: 'Sucursal', width: 110 },
+  { key: 'parking_start', label: 'Fecha y Hora', width: 150, render: (v) => formatDateTime(v) },
+  { key: 'latitude', label: 'Coordenadas', width: 170, render: (_, r) => `${r.latitude?.toFixed(5)}, ${r.longitude?.toFixed(5)}` },
+  { key: 'parking_duration', label: 'Duración', flex: 1, render: (v) => formatDuration(v) ?? '—' },
+];
 
 export default function ImportModal({ onImported, onClose }) {
+  const importParkings = useImportParkings();
   const [rows, setRows] = useState([]);
   const [fileName, setFileName] = useState('');
   const [phase, setPhase] = useState('pick');
@@ -41,7 +47,7 @@ export default function ImportModal({ onImported, onClose }) {
   async function handleImport() {
     setPhase('importing');
     try {
-      const { created, failed } = await createParkingsBulk(rows);
+      const { created, failed } = await importParkings.mutateAsync(rows);
       setFailCount(failed.length);
       setCreatedCount(created.length);
       setPhase('done');
@@ -63,23 +69,22 @@ export default function ImportModal({ onImported, onClose }) {
   }
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <Modal label="Importar desde Excel" onClose={onClose} style={modal}>
         <div style={modalHeader}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700 }}>
             <Upload size={18} /> Importar desde Excel
-          </div>
-          <button onClick={onClose} style={closeBtn}><X size={18} /></button>
+          </h2>
+          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
         </div>
 
         <div style={modalBody}>
           {phase === 'pick' && (
             <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-              <FileSpreadsheet size={48} color="#94a3b8" style={{ marginBottom: 16 }} />
-              <p style={{ color: '#64748b', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
+              <FileSpreadsheet size={48} color="#64748b" style={{ marginBottom: 16 }} />
+              <p style={{ color: '#475569', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
                 Selecciona un archivo <strong>.xlsx</strong> con las columnas:
               </p>
-              <p style={{ color: '#94a3b8', fontSize: 12, marginBottom: 24, fontFamily: 'monospace' }}>
+              <p style={{ color: '#475569', fontSize: 12, marginBottom: 24, fontFamily: 'monospace' }}>
                 No. · Placa · Sucursal · Fecha y Hora · Coordenadas · Duración
               </p>
               <input
@@ -100,35 +105,9 @@ export default function ImportModal({ onImported, onClose }) {
               <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
                 <strong style={{ color: '#1e293b' }}>{fileName}</strong>
                 {' — '}
-                <span style={{ color: '#16a34a', fontWeight: 600 }}>{rows.length} registros válidos</span>
+                <span style={{ color: '#15803d', fontWeight: 600 }}>{rows.length} registros válidos</span>
               </div>
-              <div style={{ overflowX: 'auto', maxHeight: 340, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      {['No.', 'Placa', 'Sucursal', 'Fecha y Hora', 'Coordenadas', 'Duración'].map(h => (
-                        <th key={h} style={thStyle}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={i} style={{ background: i % 2 === 0 ? 'white' : '#f8fafc' }}>
-                        <td style={tdStyle}>{r.unit_id}</td>
-                        <td style={tdStyle}>{r.unit_name}</td>
-                        <td style={tdStyle}>{r.address}</td>
-                        <td style={tdStyle}>
-                          {r.parking_start
-                            ? new Date(r.parking_start).toLocaleString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            : '—'}
-                        </td>
-                        <td style={tdStyle}>{r.latitude?.toFixed(5)}, {r.longitude?.toFixed(5)}</td>
-                        <td style={tdStyle}>{fmtDuration(r.parking_duration)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable label="Vista previa de la importación" data={rows} columns={PREVIEW_COLUMNS} maxHeight={340} />
               <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button onClick={reset} style={btnOutline}>Cancelar</button>
                 <button onClick={handleImport} style={btnPrimary} disabled={rows.length === 0}>
@@ -157,14 +136,14 @@ export default function ImportModal({ onImported, onClose }) {
           {phase === 'done' && (
             <div style={{ textAlign: 'center', padding: '32px 16px' }}>
               {failCount === 0
-                ? <CheckCircle2 size={48} color="#16a34a" style={{ marginBottom: 16 }} />
-                : <AlertTriangle size={48} color="#d97706" style={{ marginBottom: 16 }} />
+                ? <CheckCircle2 size={48} color="#15803d" style={{ marginBottom: 16 }} />
+                : <AlertTriangle size={48} color="#b45309" style={{ marginBottom: 16 }} />
               }
               <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: '#1e293b' }}>
                 {createdCount} registro{createdCount !== 1 ? 's' : ''} importado{createdCount !== 1 ? 's' : ''} correctamente
               </p>
               {failCount > 0 && (
-                <p style={{ fontSize: 13, color: '#dc2626', marginBottom: 8 }}>
+                <p style={{ fontSize: 13, color: '#b91c1c', marginBottom: 8 }}>
                   {failCount} fila{failCount !== 1 ? 's' : ''} no se pudo importar
                 </p>
               )}
@@ -177,19 +156,11 @@ export default function ImportModal({ onImported, onClose }) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
-const overlay = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000,
-};
-const modal = {
-  background: 'white', borderRadius: 16, width: '92%', maxWidth: 740,
-  boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
-};
+const modal = { borderRadius: 16, maxWidth: 740 };
 const modalHeader = {
   padding: '16px 20px',
   background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
@@ -199,7 +170,7 @@ const modalHeader = {
 const modalBody = { padding: '20px 24px' };
 const closeBtn = {
   background: 'none', border: 'none', color: 'white',
-  fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 0,
+  cursor: 'pointer', padding: 0, display: 'flex', borderRadius: 4,
 };
 const btnPrimary = {
   padding: '10px 20px', background: '#2563eb', color: 'white',
@@ -210,10 +181,3 @@ const btnOutline = {
   border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13,
   fontWeight: 600, cursor: 'pointer',
 };
-const tableStyle = { width: '100%', borderCollapse: 'collapse', fontSize: 12 };
-const thStyle = {
-  padding: '8px 10px', background: '#f1f5f9', fontWeight: 700,
-  color: '#374151', borderBottom: '1px solid #e2e8f0',
-  textAlign: 'left', whiteSpace: 'nowrap', position: 'sticky', top: 0,
-};
-const tdStyle = { padding: '6px 10px', color: '#374151', whiteSpace: 'nowrap' };

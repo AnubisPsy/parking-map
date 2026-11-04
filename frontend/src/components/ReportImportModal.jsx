@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { Upload, FileSpreadsheet, X, Check, AlertTriangle, Loader2 } from 'lucide-react';
-import { createReport } from '../api';
+import { useCreateReport } from '../api/queries';
+import Modal from './ui/Modal';
 
 const DAY_SHEETS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
@@ -242,13 +243,14 @@ function suggestLabel(filename, dateFrom, dateTo) {
   return `${fmt(dateFrom)} – ${fmt(dateTo)} ${year}`;
 }
 
-export default function ReportImportModal({ onImported, onClose }) {
+export default function ReportImportModal({ onClose }) {
   const [step, setStep] = useState('pick'); // pick | preview | saving
   const [file, setFile] = useState(null);
   const [parsed, setParsed] = useState(null);
   const [weekLabel, setWeekLabel] = useState('');
   const [parseError, setParseError] = useState('');
   const [parsing, setParsing] = useState(false);
+  const createReport = useCreateReport();
   const inputRef = useRef();
 
   async function handleFile(f) {
@@ -264,7 +266,6 @@ export default function ReportImportModal({ onImported, onClose }) {
       setStep('preview');
     } catch (err) {
       setParseError('No se pudo leer el archivo. Asegúrate de que sea el formato correcto.');
-      console.error(err);
     } finally {
       setParsing(false);
     }
@@ -273,7 +274,7 @@ export default function ReportImportModal({ onImported, onClose }) {
   async function handleSave() {
     setStep('saving');
     try {
-      const report = await createReport({
+      await createReport.mutateAsync({
         week_label: weekLabel,
         date_from: parsed.date_from,
         date_to: parsed.date_to,
@@ -283,7 +284,6 @@ export default function ReportImportModal({ onImported, onClose }) {
         non_deployed: parsed.non_deployed,
         late_departures: parsed.late_departures,
       });
-      onImported(report);
       onClose();
     } catch (err) {
       setParseError('Error al guardar el reporte: ' + err.message);
@@ -292,35 +292,35 @@ export default function ReportImportModal({ onImported, onClose }) {
   }
 
   return (
-    <div style={overlay}>
-      <div style={modal}>
+    <Modal label="Importar reporte semanal" onClose={onClose} style={modal}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <FileSpreadsheet size={22} color="#2563eb" />
             <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1e293b' }}>Importar Reporte Semanal</h2>
           </div>
-          <button onClick={onClose} style={closeBtn}><X size={18} /></button>
+          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
         </div>
 
         {/* Step: pick file */}
         {step === 'pick' && (
           <div>
-            <div
+            <button
+              type="button"
               onClick={() => inputRef.current.click()}
               onDragOver={e => e.preventDefault()}
               onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
               style={dropZone}
             >
-              {parsing ? <Loader2 size={36} color="#2563eb" style={{ animation: 'spin 1s linear infinite' }} /> : <Upload size={36} color="#94a3b8" />}
-              <p style={{ fontWeight: 600, color: '#374151', marginTop: 8 }}>
+              {parsing ? <Loader2 size={36} color="#2563eb" className="spin" /> : <Upload size={36} color="#64748b" />}
+              <span style={{ display: 'block', fontWeight: 600, color: '#374151', marginTop: 8 }}>
                 {parsing ? 'Procesando archivo...' : 'Arrastra el archivo aquí o haz click'}
-              </p>
-              <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>Formatos: .xlsm, .xlsx</p>
-            </div>
+              </span>
+              <span style={{ display: 'block', fontSize: 12, color: '#475569', marginTop: 4 }}>Formatos: .xlsm, .xlsx</span>
+            </button>
             <input ref={inputRef} type="file" accept=".xlsm,.xlsx" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
             {parseError && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
                 <AlertTriangle size={15} /> {parseError}
               </div>
             )}
@@ -332,20 +332,21 @@ export default function ReportImportModal({ onImported, onClose }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Label input */}
             <div>
-              <label style={labelStyle}>Nombre del reporte</label>
+              <label style={labelStyle}>Nombre del reporte
               <input
                 value={weekLabel}
                 onChange={e => setWeekLabel(e.target.value)}
                 style={inputStyle}
                 placeholder="Ej: Semana #22 – May 25-30 2026"
               />
+              </label>
             </div>
 
             {/* Summary cards */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <SummaryCard label="Ralentís (+30 min)" count={parsed.observations.length} color="#7c3aed" />
-              <SummaryCard label="Caídas de voltaje" count={parsed.voltage_drops.length} color="#dc2626" />
-              <SummaryCard label="Sin salida de yarda" count={parsed.non_deployed.length} color="#d97706" />
+              <SummaryCard label="Caídas de voltaje" count={parsed.voltage_drops.length} color="#b91c1c" />
+              <SummaryCard label="Sin salida de yarda" count={parsed.non_deployed.length} color="#b45309" />
               <SummaryCard label="Salidas tardías" count={parsed.late_departures.length} color="#2563eb" />
             </div>
 
@@ -363,7 +364,7 @@ export default function ReportImportModal({ onImported, onClose }) {
             </div>
 
             {parseError && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#dc2626', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
                 <AlertTriangle size={15} /> {parseError}
               </div>
             )}
@@ -382,13 +383,11 @@ export default function ReportImportModal({ onImported, onClose }) {
         {/* Step: saving */}
         {step === 'saving' && (
           <div style={{ textAlign: 'center', padding: '30px 0' }}>
-            <Loader2 size={36} color="#2563eb" style={{ animation: 'spin 1s linear infinite', marginBottom: 12 }} />
+            <Loader2 size={36} color="#2563eb" className="spin" style={{ marginBottom: 12 }} />
             <p style={{ color: '#64748b' }}>Guardando reporte...</p>
           </div>
         )}
-      </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
+    </Modal>
   );
 }
 
@@ -401,25 +400,20 @@ function SummaryCard({ label, count, color }) {
   );
 }
 
-const overlay = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-};
-const modal = {
-  background: 'white', borderRadius: 14, padding: 28, width: 500,
-  maxWidth: '95vw', boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-};
+const modal = { maxWidth: 500, padding: 28 };
 const closeBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
   display: 'flex', padding: 4, borderRadius: 6,
 };
 const dropZone = {
+  width: '100%',
   border: '2px dashed #e2e8f0', borderRadius: 12, padding: '36px 20px',
   textAlign: 'center', cursor: 'pointer', background: '#f8fafc',
   transition: 'border-color 0.15s',
 };
 const labelStyle = { fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 };
 const inputStyle = {
+  marginTop: 6,
   width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8,
   fontSize: 14, color: '#1e293b', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
 };

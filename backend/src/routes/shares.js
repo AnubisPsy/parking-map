@@ -1,91 +1,86 @@
+const { randomBytes, randomUUID } = require('crypto');
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db');
+const { validate, sendPage } = require('../http');
+const { shareBody, pageQuery } = require('../schemas');
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
+// Las copias de datos solo hacen falta al abrir el enlace, no al listarlos
+function toSummary(share) {
+  return {
+    id: share.id,
+    token: share.token,
+    type: share.type,
+    unit_ids: share.unit_ids,
+    expires_at: share.expires_at,
+    created_at: share.created_at,
+  };
+}
+
+router.get('/', validate(pageQuery, 'query'), (req, res) => {
   const shares = db.getShares()
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-  res.json(shares);
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .map(toSummary);
+  sendPage(res, shares, req.valid);
 });
 
 router.delete('/:id', (req, res) => {
   const shares = db.getShares();
-  const idx = shares.findIndex(s => s.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'No encontrado' });
-  shares.splice(idx, 1);
-  db.saveShares(shares);
+  const remaining = shares.filter((s) => s.id !== req.params.id);
+  if (remaining.length === shares.length) return res.status(404).json({ error: 'No encontrado' });
+  db.saveShares(remaining);
   res.json({ success: true });
 });
 
-router.post('/', (req, res) => {
-  const { unit_ids = null, expires_in_minutes = 60, report_id = null } = req.body;
+router.post('/', validate(shareBody), (req, res) => {
+  const { unit_ids, expires_in_minutes, report_id } = req.valid;
 
-  const mins = parseInt(expires_in_minutes);
-  if (!mins || mins < 1 || mins > 10080) {
-    return res.status(400).json({ error: 'expires_in_minutes debe ser entre 1 y 10080 (7 días)' });
-  }
-
-  const token = uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '').slice(0, 8);
-  const expiresAt = new Date(Date.now() + mins * 60 * 1000).toISOString();
+  const token = randomBytes(20).toString('hex');
+  const expiresAt = new Date(Date.now() + expires_in_minutes * 60 * 1000).toISOString();
 
   // Report share
   if (report_id) {
-    const report = db.getReports().find(r => r.id === report_id);
+    const report = db.getReports().find((r) => r.id === report_id);
     if (!report) return res.status(404).json({ error: 'Reporte no encontrado' });
 
     const share = {
-      id: uuidv4(),
+      id: randomUUID(),
       token,
       type: 'report',
       report_snapshot: report,
       expires_at: expiresAt,
       created_at: new Date().toISOString(),
     };
-    const shares = db.getShares();
-    shares.push(share);
-    db.saveShares(shares);
-    return res.status(201).json({ id: share.id, token: share.token, type: 'report', expires_at: share.expires_at, created_at: share.created_at });
+    db.saveShares([...db.getShares(), share]);
+    return res.status(201).json(toSummary(share));
   }
 
   // Parking share
-  const allParkings = db.getParkings();
-  const snapshot = Array.isArray(unit_ids)
-    ? allParkings.filter(p => unit_ids.includes(p.unit_id))
-    : allParkings;
-  const allTracks = db.getTracks();
-  const tracksSnapshot = Array.isArray(unit_ids)
-    ? allTracks.filter(t => unit_ids.includes(t.unit_id))
-    : allTracks;
+  const snapshot = unit_ids
+    ? db.getParkings().filter((p) => unit_ids.includes(p.unit_id))
+    : db.getParkings();
+  const tracksSnapshot = unit_ids
+    ? db.getTracks().filter((t) => unit_ids.includes(t.unit_id))
+    : db.getTracks();
 
   const share = {
-    id: uuidv4(),
+    id: randomUUID(),
     token,
     type: 'parking',
-    unit_ids: Array.isArray(unit_ids) ? unit_ids : null,
+    unit_ids,
     expires_at: expiresAt,
     created_at: new Date().toISOString(),
     snapshot,
     tracks_snapshot: tracksSnapshot,
   };
 
-  const shares = db.getShares();
-  shares.push(share);
-  db.saveShares(shares);
-
-  res.status(201).json({
-    id: share.id,
-    token: share.token,
-    type: 'parking',
-    unit_ids: share.unit_ids,
-    expires_at: share.expires_at,
-    created_at: share.created_at,
-  });
+  db.saveShares([...db.getShares(), share]);
+  res.status(201).json(toSummary(share));
 });
 
 router.get('/:token', (req, res) => {
-  const share = db.getShares().find(s => s.token === req.params.token);
+  const share = db.getShares().find((s) => s.token === req.params.token);
   if (!share) return res.status(404).json({ error: 'Enlace no encontrado' });
   if (new Date(share.expires_at) < new Date()) {
     return res.status(410).json({ error: 'El enlace ha expirado' });
@@ -103,11 +98,11 @@ router.get('/:token', (req, res) => {
   // Parking share
   let parkings;
   if (share.snapshot) {
-    parkings = share.snapshot;
+    parkings = [...share.snapshot];
   } else {
     const allParkings = db.getParkings();
     parkings = share.unit_ids
-      ? allParkings.filter(p => share.unit_ids.includes(p.unit_id))
+      ? allParkings.filter((p) => share.unit_ids.includes(p.unit_id))
       : allParkings;
   }
 

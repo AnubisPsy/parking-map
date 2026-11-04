@@ -1,6 +1,8 @@
+const { randomUUID } = require('crypto');
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db');
+const { validate, sendPage } = require('../http');
+const { reportBody, pageQuery } = require('../schemas');
 
 const router = express.Router();
 
@@ -16,10 +18,10 @@ function buildSummary(r) {
   };
 }
 
-router.get('/', (req, res) => {
+router.get('/', validate(pageQuery, 'query'), (req, res) => {
   const reports = db.getReports()
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .map(r => ({
+    .map((r) => ({
       id: r.id,
       type: r.type || 'weekly',
       label: r.label || r.week_label,
@@ -30,54 +32,37 @@ router.get('/', (req, res) => {
       created_at: r.created_at,
       summary: buildSummary(r),
     }));
-  res.json(reports);
+  sendPage(res, reports, req.valid);
 });
 
 router.get('/:id', (req, res) => {
-  const report = db.getReports().find(r => r.id === req.params.id);
+  const report = db.getReports().find((r) => r.id === req.params.id);
   if (!report) return res.status(404).json({ error: 'Reporte no encontrado' });
   res.json(report);
 });
 
-router.post('/', (req, res) => {
+router.post('/', validate(reportBody), (req, res) => {
   const {
-    type = 'weekly',
-    label, week_label,
-    date_from, date_to, source_file,
-    // weekly fields
-    observations, voltage_drops, non_deployed, late_departures,
-    // infraction fields
-    infractions,
-  } = req.body;
+    type, label, week_label, date_from, date_to, source_file,
+    observations, voltage_drops, non_deployed, late_departures, infractions,
+  } = req.valid;
 
   const displayLabel = label || week_label;
-  if (!displayLabel || !date_from || !date_to) {
-    return res.status(400).json({ error: 'label, date_from y date_to son requeridos' });
-  }
-
   const report = {
-    id: uuidv4(),
+    id: randomUUID(),
     type,
     label: displayLabel,
     week_label: displayLabel,
     date_from,
     date_to,
-    source_file: source_file || null,
+    source_file,
     created_at: new Date().toISOString(),
     ...(type === 'infractions'
-      ? { infractions: infractions || [] }
-      : {
-          observations: observations || [],
-          voltage_drops: voltage_drops || [],
-          non_deployed: non_deployed || [],
-          late_departures: late_departures || [],
-        }
-    ),
+      ? { infractions }
+      : { observations, voltage_drops, non_deployed, late_departures }),
   };
 
-  const reports = db.getReports();
-  reports.push(report);
-  db.saveReports(reports);
+  db.saveReports([...db.getReports(), report]);
 
   res.status(201).json({
     id: report.id,
@@ -92,10 +77,9 @@ router.post('/', (req, res) => {
 
 router.delete('/:id', (req, res) => {
   const reports = db.getReports();
-  const idx = reports.findIndex(r => r.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Reporte no encontrado' });
-  reports.splice(idx, 1);
-  db.saveReports(reports);
+  const remaining = reports.filter((r) => r.id !== req.params.id);
+  if (remaining.length === reports.length) return res.status(404).json({ error: 'Reporte no encontrado' });
+  db.saveReports(remaining);
   res.json({ success: true });
 });
 

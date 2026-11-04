@@ -1,108 +1,73 @@
+const { randomUUID } = require('crypto');
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
 const { db } = require('../db');
+const { validate, sendPage, inDateRange } = require('../http');
+const { parkingBody, bulkBody, listQuery, deleteParkingsQuery } = require('../schemas');
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  const parkings = db.getParkings();
-  res.json(parkings.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)));
+function buildParking(data) {
+  return {
+    id: randomUUID(),
+    unit_id: data.unit_id,
+    unit_name: data.unit_name,
+    latitude: data.latitude,
+    longitude: data.longitude,
+    address: data.address,
+    parking_duration: data.parking_duration,
+    parking_start: data.parking_start,
+    notes: data.notes,
+    created_at: new Date().toISOString(),
+  };
+}
+
+router.get('/', validate(listQuery, 'query'), (req, res) => {
+  const { unit_id, from, to, limit, offset } = req.valid;
+  const parkings = db.getParkings()
+    .filter((p) => !unit_id || p.unit_id === unit_id)
+    .filter((p) => inDateRange(p.parking_start || p.created_at, from, to))
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  sendPage(res, parkings, { limit, offset });
 });
 
 router.get('/:id', (req, res) => {
-  const parking = db.getParkings().find(p => p.id === req.params.id);
+  const parking = db.getParkings().find((p) => p.id === req.params.id);
   if (!parking) return res.status(404).json({ error: 'No encontrado' });
   res.json(parking);
 });
 
-router.post('/', (req, res) => {
-  const { unit_id, unit_name, latitude, longitude, address, parking_duration, parking_start, notes } = req.body;
-
-  if (!unit_id || latitude === undefined || longitude === undefined) {
-    return res.status(400).json({ error: 'unit_id, latitude y longitude son requeridos' });
-  }
-
-  const lat = parseFloat(latitude);
-  const lng = parseFloat(longitude);
-  if (isNaN(lat) || lat < -90 || lat > 90) return res.status(400).json({ error: 'Latitud inválida (-90 a 90)' });
-  if (isNaN(lng) || lng < -180 || lng > 180) return res.status(400).json({ error: 'Longitud inválida (-180 a 180)' });
-
-  const parking = {
-    id: uuidv4(),
-    unit_id: unit_id.trim(),
-    unit_name: unit_name?.trim() || null,
-    latitude: lat,
-    longitude: lng,
-    address: address?.trim() || null,
-    parking_duration: parking_duration ? parseInt(parking_duration) : null,
-    parking_start: parking_start || null,
-    notes: notes?.trim() || null,
-    created_at: new Date().toISOString(),
-  };
-
-  const parkings = db.getParkings();
-  parkings.push(parking);
-  db.saveParkings(parkings);
-
+router.post('/', validate(parkingBody), (req, res) => {
+  const parking = buildParking(req.valid);
+  db.saveParkings([...db.getParkings(), parking]);
   res.status(201).json(parking);
 });
 
-router.post('/bulk', (req, res) => {
-  const items = req.body;
-  if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'Se esperaba un array no vacío' });
-  }
-
-  const parkings = db.getParkings();
+// Una fila inválida no detiene el resto: se informa en `failed`
+router.post('/bulk', validate(bulkBody), (req, res) => {
   const created = [];
   const failed = [];
 
-  for (const item of items) {
-    const { unit_id, unit_name, latitude, longitude, address, parking_duration, parking_start, notes } = item;
-    if (!unit_id || latitude === undefined || longitude === undefined) {
-      failed.push({ error: 'unit_id, latitude y longitude son requeridos' });
-      continue;
-    }
-    const lat = parseFloat(latitude);
-    const lng = parseFloat(longitude);
-    if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lng) || lng < -180 || lng > 180) {
-      failed.push({ error: 'Coordenadas inválidas' });
-      continue;
-    }
-    const parking = {
-      id: uuidv4(),
-      unit_id: unit_id.trim(),
-      unit_name: unit_name?.trim() || null,
-      latitude: lat,
-      longitude: lng,
-      address: address?.trim() || null,
-      parking_duration: parking_duration ? parseInt(parking_duration) : null,
-      parking_start: parking_start || null,
-      notes: notes?.trim() || null,
-      created_at: new Date().toISOString(),
-    };
-    parkings.push(parking);
-    created.push(parking);
+  for (const item of req.valid) {
+    const result = parkingBody.safeParse(item);
+    if (result.success) created.push(buildParking(result.data));
+    else failed.push({ error: result.error.issues[0].message });
   }
 
-  if (created.length > 0) db.saveParkings(parkings);
+  if (created.length > 0) db.saveParkings([...db.getParkings(), ...created]);
   res.status(201).json({ created, failed });
 });
 
-router.delete('/', (req, res) => {
-  const { unit_id } = req.query;
-  let parkings = db.getParkings();
-  parkings = unit_id ? parkings.filter(p => p.unit_id !== unit_id) : [];
-  db.saveParkings(parkings);
+router.delete('/', validate(deleteParkingsQuery, 'query'), (req, res) => {
+  const { unit_id } = req.valid;
+  db.saveParkings(unit_id ? db.getParkings().filter((p) => p.unit_id !== unit_id) : []);
   res.json({ success: true, deleted: unit_id ? `unit:${unit_id}` : 'all' });
 });
 
 router.delete('/:id', (req, res) => {
   const parkings = db.getParkings();
-  const idx = parkings.findIndex(p => p.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'No encontrado' });
-  parkings.splice(idx, 1);
-  db.saveParkings(parkings);
+  const remaining = parkings.filter((p) => p.id !== req.params.id);
+  if (remaining.length === parkings.length) return res.status(404).json({ error: 'No encontrado' });
+  db.saveParkings(remaining);
   res.json({ success: true });
 });
 

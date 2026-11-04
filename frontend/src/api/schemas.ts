@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+// Sin esto Zod prueba `new Function` para acelerarse, y la política CSP del servidor lo bloquea
+z.config({ jitless: true });
+
 // Contratos de la API. Validan solo los campos que usa la interfaz: los que no
 // se declaran se descartan (por ejemplo, las copias completas dentro de /shares).
 

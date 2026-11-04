@@ -15,7 +15,8 @@ dotenv.config({ path: envFile, quiet: true });
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  // El mismo puerto que usa el proxy de frontend/vite.config.js
+  PORT: z.coerce.number().int().min(1).max(65535).default(4040),
   // Solo hace falta si el frontend se sirve desde otro origen
   FRONTEND_URL: z.url().optional(),
   DATA_DIR: z.string().default(path.join(ROOT, 'data')),

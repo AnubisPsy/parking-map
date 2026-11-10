@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet.markercluster';
@@ -44,7 +44,12 @@ function createPinIcon(color, highlighted, parked) {
 
 // Marcadores creados directamente con Leaflet: miles de componentes React por
 // marcador bloquean la página, y solo uno de ellos tiene el popup abierto a la vez.
-export default function ParkingLayer({ parkings, unitColors, highlightId, onMarkerClick, parkedIds = NO_IDS }) {
+// Memorizado: el mapa se vuelve a pintar en cada cuadro de la reproducción y esta capa
+// solo cambia con sus propios datos.
+export default memo(ParkingLayer);
+
+// `following`: el mapa sigue a una unidad; el popup no debe moverlo hacia la parada.
+function ParkingLayer({ parkings, unitColors, highlightId, onMarkerClick, parkedIds = NO_IDS, following = false }) {
   const map = useMap();
   const [popupId, setPopupId] = useState(null);
   const markersRef = useRef(new Map());
@@ -152,8 +157,9 @@ export default function ParkingLayer({ parkings, unitColors, highlightId, onMark
 
   return (
     <ParkingPopup
-      key={popupParking.id}
+      key={`${popupParking.id}-${following}`}
       parking={popupParking}
+      autoPan={!following}
       color={unitColors[popupParking.unit_id] || NEUTRAL}
       onClose={() => {
         // Cerrar el popup también quita la selección, para poder volver a abrirlo con un clic
@@ -163,9 +169,12 @@ export default function ParkingLayer({ parkings, unitColors, highlightId, onMark
   );
 }
 
-function ParkingPopup({ parking: p, color, onClose }) {
+function ParkingPopup({ parking: p, color, autoPan, onClose }) {
+  // Una posición nueva en cada render hace que react-leaflet cierre y vuelva a abrir
+  // el popup, y al abrirse mueve el mapa hacia él: peleaba con el seguimiento.
+  const position = useMemo(() => [p.latitude, p.longitude], [p.latitude, p.longitude]);
   return (
-    <Popup position={[p.latitude, p.longitude]} offset={[0, -31]} eventHandlers={{ remove: onClose }}>
+    <Popup position={position} offset={[0, -31]} autoPan={autoPan} eventHandlers={{ remove: onClose }}>
       <div className="popup-head">
         <span className="dot" style={{ background: color }} />
         <span>{p.unit_name || p.unit_id}</span>

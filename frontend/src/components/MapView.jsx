@@ -83,6 +83,7 @@ export default function MapView({ parkings: latestParkings, unitColors: latestCo
           highlightId={highlightId}
           onMarkerClick={onMarkerClick}
           parkedIds={parkedIds}
+          following={followTrack != null}
         />
         <TrackDynamicLayers tracks={tracks} time={playback.time} followTrack={followTrack} showRoute={showRoute} />
       </MapContainer>

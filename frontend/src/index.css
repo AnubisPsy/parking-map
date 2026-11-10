@@ -685,6 +685,11 @@ select.input { cursor: pointer; }
 .stops-table td, .stops-table th { font-size: 13px; }
 .stops-table th { font-size: 12px; }
 .stops-table tbody tr:hover { background: var(--bg); }
+/* Las paradas de una misma fecha comparten franja: azul y blanco alternados por día */
+.stops-table tbody tr.stop-day-tinted { background: var(--accent-soft); }
+.stops-table tbody tr.stop-day-tinted:hover { background: #dde8f7; }
+.stops-table tbody tr.stop-day-tinted td { border-bottom-color: #d6e3f5; }
+.next-day { font-size: 11px; font-weight: 600; color: var(--accent-ink); }
 .location-btn {
   display: inline-flex;
   align-items: center;

@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Download, ExternalLink, MapPin } from 'lucide-react';
 import { exportTracksToExcel } from '../../lib/exportTracks';
 import { plural } from '../../lib/format';
@@ -82,9 +82,27 @@ export function TrackDetail({ summary: s, color }) {
   );
 }
 
+const DAY_MS = 86400000;
+
+// Días entre dos fechas del calendario local (la salida puede ser días después de la llegada)
+const daysBetween = (a, b) =>
+  Math.round((new Date(localDateKey(b) + 'T12:00:00') - new Date(localDateKey(a) + 'T12:00:00')) / DAY_MS);
+
+// Franja de cada parada: cambia con cada fecha y alterna azul / blanco, empezando en azul
+function dayBands(stops) {
+  let band = -1;
+  let lastDay = null;
+  return stops.map((stop) => {
+    const day = localDateKey(stop.arrival);
+    if (day !== lastDay) { band++; lastDay = day; }
+    return band % 2 === 0;
+  });
+}
+
 function StopsTable({ summary: s }) {
   const [preview, setPreview] = useState(null);
   const tooltipId = useId();
+  const tinted = useMemo(() => dayBands(s.stops), [s.stops]);
 
   function open(stop, element) {
     const rect = element.getBoundingClientRect();
@@ -103,6 +121,7 @@ function StopsTable({ summary: s }) {
         <thead>
           <tr>
             <th scope="col">#</th>
+            <th scope="col">Fecha</th>
             <th scope="col">Llegada</th>
             <th scope="col">Salida</th>
             <th scope="col">Tiempo detenido</th>
@@ -112,11 +131,21 @@ function StopsTable({ summary: s }) {
           </tr>
         </thead>
         <tbody>
-          {s.stops.map((stop) => (
-            <tr key={stop.id}>
+          {s.stops.map((stop, i) => {
+            const laterDays = daysBetween(stop.arrival, stop.departure);
+            return (
+            <tr key={stop.id} className={tinted[i] ? 'stop-day-tinted' : undefined}>
               <td className="muted" data-label="Parada">{stop.index}</td>
+              <td data-label="Fecha">{formatDate(stop.arrival)}</td>
               <td data-label="Llegada">{formatClock(stop.arrival)}</td>
-              <td data-label="Salida">{formatClock(stop.departure)}</td>
+              <td data-label="Salida">
+                {formatClock(stop.departure)}
+                {laterDays > 0 && (
+                  <span className="next-day" title={`Sale el ${formatDate(stop.departure)}`}>
+                    {' '}+{laterDays} d<span className="sr-only"> (el {formatDate(stop.departure)})</span>
+                  </span>
+                )}
+              </td>
               <td data-label="Tiempo detenido"><strong>{formatMinutes(stop.minutes)}</strong></td>
               <td className="muted" data-label="Traslado previo">{formatMinutes(stop.travelMinutes)}</td>
               <td data-label="Sucursal">{stop.address || '—'}</td>
@@ -149,7 +178,8 @@ function StopsTable({ summary: s }) {
                 </span>
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
 

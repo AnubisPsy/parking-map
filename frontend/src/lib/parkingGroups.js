@@ -58,7 +58,7 @@ function buildFlatGroups(parkings, groupBy, unitColors) {
   });
 
   const groups = [...map.values()];
-  if (groupBy === 'date') groups.sort((a, b) => b.key.localeCompare(a.key));
+  if (groupBy === 'date') groups.sort((a, b) => a.key.localeCompare(b.key));
   else groups.sort((a, b) => a.label.localeCompare(b.label));
   groups.forEach((g) => g.items.sort(byStartTime));
   return groups;
@@ -99,7 +99,7 @@ function buildDateUnitGroups(parkings, unitColors) {
         .sort((a, b) => a.label.localeCompare(b.label))
         .map((sg) => ({ ...sg, items: [...sg.items].sort(byStartTime) })),
     }))
-    .sort((a, b) => b.key.localeCompare(a.key));
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export function buildGroups(parkings, groupBy, unitColors) {

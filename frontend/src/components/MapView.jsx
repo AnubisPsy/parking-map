@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapTypePicker, { MAP_TYPES } from './MapTypePicker';
 import ParkingLayer from './ParkingLayer';
+import MapUnmountGuard from './MapUnmountGuard';
 import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel, parkedStopIds } from './TrackPlayback';
 
 const NO_TRACKS = [];
@@ -64,6 +65,7 @@ export default function MapView({ parkings: latestParkings, unitColors: latestCo
         zoom={12}
         style={{ height: '100%', width: '100%' }}
       >
+        <MapUnmountGuard />
         <BackdropLayer key={`${mapType}-fondo`} type={current} />
         <TileLayer
           key={mapType}

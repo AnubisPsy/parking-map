@@ -4,6 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { plural } from '../lib/format';
 import MapTypePicker, { MAP_TYPES } from './MapTypePicker';
+import MapUnmountGuard from './MapUnmountGuard';
 
 const PIN_COLOR = '#256abf';
 
@@ -45,6 +46,7 @@ export default function ReportDayMap({ observations }) {
       <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
         <TileLayer key={mapType} attribution={current.attr} url={current.url} subdomains={current.subdomains} />
         <FitBounds points={withCoords} />
+        <MapUnmountGuard />
         {withCoords.map((obs, i) => (
           <Marker key={i} position={[obs.latitude, obs.longitude]} icon={icon} title={`Ralentí de ${obs.vehicle_num}`}>
             <Popup>

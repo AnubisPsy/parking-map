@@ -60,7 +60,14 @@ export default function Home() {
 
   // Las unidades que solo tienen recorrido (sin estacionamientos) también reciben color
   const unitColors = useMemo(() => buildUnitColors([...parkings, ...tracks]), [parkings, tracks]);
-  const filters = useParkingFilters(parkings, unitColors);
+  // Las paradas de un recorrido desmarcado se ocultan junto con su ruta; los registros
+  // que no vienen de un recorrido (Excel, manuales) se muestran siempre
+  const shownParkings = useMemo(
+    () => (hiddenTrackIds.size === 0 ? parkings : parkings.filter((p) => !p.track_id || !hiddenTrackIds.has(p.track_id))),
+    [parkings, hiddenTrackIds],
+  );
+  const hiddenCount = parkings.length - shownParkings.length;
+  const filters = useParkingFilters(shownParkings, unitColors);
   const { groupBy, groups, visibleParkings, groupFiltered, highlightId, setHighlightId } = filters;
 
   // Abrir un día o una unidad en la lista, o elegir fechas, recorta la ruta y el reproductor
@@ -177,7 +184,8 @@ export default function Home() {
               <div>
                 <h1 className="sidebar-title">Estacionamientos</h1>
                 <p className="small muted">
-                  {parkings.length} {plural(parkings.length, 'registro')} · {groups.length} {plural(groups.length, 'grupo')}
+                  {shownParkings.length} {plural(shownParkings.length, 'registro')} · {groups.length} {plural(groups.length, 'grupo')}
+                  {hiddenCount > 0 && ` · ${hiddenCount} ${plural(hiddenCount, 'oculto')}`}
                 </p>
               </div>
               {parkings.length > 0 && (
@@ -237,11 +245,19 @@ export default function Home() {
               )}
             />
           )}
-          {!loading && parkings.length > 0 && (
+          {!loading && parkings.length > 0 && shownParkings.length === 0 && (
+            <EmptyState
+              icon={Route}
+              title="Registros ocultos"
+              description="Son paradas de recorridos desmarcados. Marca un recorrido arriba para verlas."
+              action={<button onClick={() => setAllTracks(true)} className="btn btn-secondary">Mostrar todos los recorridos</button>}
+            />
+          )}
+          {!loading && shownParkings.length > 0 && (
             <GroupedParkingList
               filters={filters}
               unitColors={unitColors}
-              totalCount={parkings.length}
+              totalCount={shownParkings.length}
               visibleCount={visibleParkings.length}
               onDeleteGroup={handleDeleteGroup}
               onDeleteItem={handleDeleteOne}

@@ -120,7 +120,9 @@ export function usePlayback(tracks, viewKey) {
     if (!playing || !range) return;
     let raf, last = performance.now();
     const tick = now => {
-      const next = timeRef.current + (now - last) * speed;
+      // El primer cuadro puede traer una hora anterior a `last`: sin el tope, el reloj
+      // retrocedía un poco (y al reiniciar la vista quedaba justo antes del final)
+      const next = timeRef.current + Math.max(0, now - last) * speed;
       last = now;
       if (next >= range.max) {
         timeRef.current = range.max;
@@ -138,7 +140,8 @@ export function usePlayback(tracks, viewKey) {
 
   const togglePlay = useCallback(() => {
     if (!range) return;
-    if (!playing && timeRef.current >= range.max) seek(range.min);
+    // En el último segundo cuenta como terminado: "Reproducir" vuelve a empezar
+    if (!playing && timeRef.current >= range.max - 1000) seek(range.min);
     setPlaying(p => !p);
   }, [playing, range, seek]);
 

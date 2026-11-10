@@ -7,6 +7,8 @@ import { formatDateTime, plural } from '../lib/format';
 import { clipTracks, trackWindow } from '../lib/parkingGroups';
 import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
+import { useTrackSelection } from '../hooks/useTrackSelection';
+import TracksPanel from '../components/parking/TracksPanel';
 import GroupedParkingList from '../components/parking/GroupedParkingList';
 import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarControls';
 import { SharedHeader, sharedMapNav } from '../components/ui/AppHeader';
@@ -49,7 +51,10 @@ function SharedMapView({ data, token }) {
   const { parkings, tracks } = data;
 
   const unitColors = useMemo(() => buildUnitColors([...parkings, ...tracks]), [parkings, tracks]);
-  const filters = useParkingFilters(parkings, unitColors, {
+  // Igual que en el mapa privado: los recorridos empiezan desmarcados y sus paradas ocultas
+  const trackSelection = useTrackSelection(tracks, parkings);
+  const shownParkings = trackSelection.visibleParkings;
+  const filters = useParkingFilters(shownParkings, unitColors, {
     groupBy: searchParams.get('groupBy'),
     from: searchParams.get('from'),
     to: searchParams.get('to'),
@@ -63,9 +68,16 @@ function SharedMapView({ data, token }) {
     const win = trackWindow({ groupBy: filters.groupBy, filterKey, appliedFrom, appliedTo });
     const units = new Set(visibleParkings.map((p) => p.unit_id));
     const shown = clipTracks(tracks, win)
+      .filter((t) => trackSelection.isSelected(t.id))
       .filter((t) => filters.groupBy !== 'address' || filterKey === 'all' || units.has(t.unit_id));
     return prepareTracks(shown, unitColors, parkings, win);
-  }, [tracks, parkings, visibleParkings, filters.groupBy, filterKey, appliedFrom, appliedTo, unitColors]);
+  }, [tracks, parkings, visibleParkings, filters.groupBy, filterKey, appliedFrom, appliedTo, unitColors, trackSelection.isSelected]);
+  // Recorridos del panel: los que caen en el día, la unidad o las fechas que se ven
+  const panelTracks = useMemo(
+    () => clipTracks(tracks, trackWindow({ groupBy: filters.groupBy, filterKey, appliedFrom, appliedTo })),
+    [tracks, filters.groupBy, filterKey, appliedFrom, appliedTo],
+  );
+  const hiddenCount = parkings.length - shownParkings.length;
 
   return (
     <div className="page">
@@ -78,11 +90,14 @@ function SharedMapView({ data, token }) {
           <div className="sidebar-head">
             <div>
               <h1 className="sidebar-title">Mapa compartido</h1>
-              <p className="small muted">{parkings.length} {plural(parkings.length, 'registro')}</p>
+              <p className="small muted">
+                {shownParkings.length} {plural(shownParkings.length, 'registro')}
+                {hiddenCount > 0 && ` · ${hiddenCount} ${plural(hiddenCount, 'oculto')}`}
+              </p>
             </div>
             {parkings.length > 0 && (
               <>
-                <GroupPicker groupBy={filters.groupBy} onChange={filters.changeGroupBy} />
+                <GroupPicker groupBy={filters.groupBy} locked />
                 <DateRangeFilter
                   from={filters.dateFrom}
                   to={filters.dateTo}
@@ -93,13 +108,31 @@ function SharedMapView({ data, token }) {
               </>
             )}
           </div>
+          {tracks.length > 0 && (
+            <TracksPanel
+              tracks={panelTracks}
+              view={trackWindow({ groupBy: filters.groupBy, filterKey, appliedFrom, appliedTo })}
+              selectedCount={mapTracks.length}
+              isSelected={trackSelection.isSelected}
+              unitColors={unitColors}
+              onToggle={trackSelection.toggle}
+              onSetAll={(visible) => trackSelection.setMany(panelTracks.map((t) => t.id), visible)}
+              stopsTo={sharedMapNav(token, search)[1].to}
+            />
+          )}
           {parkings.length === 0 ? (
             <EmptyState icon={MapPin} title="Sin registros" description="Este enlace no incluye estacionamientos." />
+          ) : shownParkings.length === 0 ? (
+            <EmptyState
+              icon={MapPin}
+              title="Elige un recorrido"
+              description="Marca un recorrido arriba para ver sus paradas en el mapa y en la lista."
+            />
           ) : (
             <GroupedParkingList
               filters={filters}
               unitColors={unitColors}
-              totalCount={parkings.length}
+              totalCount={shownParkings.length}
               visibleCount={visibleParkings.length}
             />
           )}

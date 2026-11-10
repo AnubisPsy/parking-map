@@ -2,7 +2,15 @@ import { X } from 'lucide-react';
 import { GROUP_OPTIONS } from '../../lib/parkingGroups';
 import { plural } from '../../lib/format';
 
-export function GroupPicker({ groupBy, onChange }) {
+// `locked`: solo muestra la agrupación (el mapa compartido conserva la del enlace)
+export function GroupPicker({ groupBy, onChange, locked = false }) {
+  if (locked) {
+    return (
+      <p className="group-locked">
+        <span className="muted">Agrupado por</span> {GROUP_OPTIONS.find((opt) => opt.id === groupBy)?.label ?? 'Unidad'}
+      </p>
+    );
+  }
   return (
     <div className="field" style={{ gap: 4 }}>
       <span id="group-picker-label" className="section-label">Agrupar por</span>

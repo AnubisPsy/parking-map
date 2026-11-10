@@ -16,6 +16,7 @@ import { plural } from '../lib/format';
 import { clipTracks, trackWindow } from '../lib/parkingGroups';
 import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
+import { useTrackSelection } from '../hooks/useTrackSelection';
 import { useConfirm } from '../components/ConfirmModal';
 import GroupedParkingList from '../components/parking/GroupedParkingList';
 import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarControls';
@@ -65,17 +66,12 @@ export default function Home() {
   const [modal, setModal] = useState(null);
   const closeModal = () => setModal(null);
 
-  // Se guardan los desmarcados: un recorrido recién importado aparece seleccionado
-  const [hiddenTrackIds, setHiddenTrackIds] = useState(() => new Set());
+  // Los recorridos empiezan desmarcados; uno recién importado aparece marcado
+  const trackSelection = useTrackSelection(tracks, parkings);
+  const shownParkings = trackSelection.visibleParkings;
 
   // Las unidades que solo tienen recorrido (sin estacionamientos) también reciben color
   const unitColors = useMemo(() => buildUnitColors([...parkings, ...tracks]), [parkings, tracks]);
-  // Las paradas de un recorrido desmarcado se ocultan junto con su ruta; los registros
-  // que no vienen de un recorrido (Excel, manuales) se muestran siempre
-  const shownParkings = useMemo(
-    () => (hiddenTrackIds.size === 0 ? parkings : parkings.filter((p) => !p.track_id || !hiddenTrackIds.has(p.track_id))),
-    [parkings, hiddenTrackIds],
-  );
   const hiddenCount = parkings.length - shownParkings.length;
   const filters = useParkingFilters(shownParkings, unitColors);
   const { groupBy, groups, visibleParkings, groupFiltered, highlightId, setHighlightId } = filters;
@@ -87,25 +83,15 @@ export default function Home() {
   );
   const rangeTracks = useMemo(() => clipTracks(tracks, trackWin), [tracks, trackWin]);
   const mapTracks = useMemo(
-    () => prepareTracks(rangeTracks.filter((t) => !hiddenTrackIds.has(t.id)), unitColors, parkings, trackWin),
-    [rangeTracks, hiddenTrackIds, unitColors, parkings, trackWin],
+    () => prepareTracks(rangeTracks.filter((t) => trackSelection.isSelected(t.id)), unitColors, parkings, trackWin),
+    [rangeTracks, trackSelection.isSelected, unitColors, parkings, trackWin],
   );
 
-  function toggleTrack(id) {
-    setHiddenTrackIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
+  const setAllTracks = (visible) => trackSelection.setMany(rangeTracks.map((t) => t.id), visible);
 
-  function setAllTracks(visible) {
-    setHiddenTrackIds((prev) => {
-      const next = new Set(prev);
-      rangeTracks.forEach((t) => (visible ? next.delete(t.id) : next.add(t.id)));
-      return next;
-    });
+  function handleTracksImported(results) {
+    applyImportedTracks(results);
+    trackSelection.setMany(results.map((r) => r.track.id), true);
   }
 
   async function handleDeleteTrack(track) {
@@ -230,9 +216,9 @@ export default function Home() {
               view={trackWin}
               onGroupByDate={groupBy === 'date' || groupBy === 'date_unit' ? null : () => filters.changeGroupBy('date')}
               selectedCount={mapTracks.length}
-              isSelected={(id) => !hiddenTrackIds.has(id)}
+              isSelected={trackSelection.isSelected}
               unitColors={unitColors}
-              onToggle={toggleTrack}
+              onToggle={trackSelection.toggle}
               onSetAll={setAllTracks}
               onDelete={handleDeleteTrack}
             />
@@ -304,7 +290,7 @@ export default function Home() {
               from: filters.appliedFrom,
               to: filters.appliedTo,
               unitId: trackWin.unitId,
-              hiddenTracks: tracks.filter((t) => hiddenTrackIds.has(t.id)),
+              hiddenTracks: trackSelection.hiddenTracks,
               recordCount: visibleParkings.length,
             }}
             onClose={closeModal}
@@ -314,7 +300,7 @@ export default function Home() {
           <ImportModal onImported={(created) => setHighlightId(created[0]?.id ?? null)} onClose={closeModal} />
         )}
         {modal === 'tracks' && (
-          <TrackImportModal onImported={applyImportedTracks} onClose={closeModal} />
+          <TrackImportModal onImported={handleTracksImported} onClose={closeModal} />
         )}
         {modal === 'shares' && <SharesListModal onClose={closeModal} />}
       </Suspense>

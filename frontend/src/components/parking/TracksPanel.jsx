@@ -19,7 +19,8 @@ function viewLabel(view) {
 }
 
 // Selector de qué recorridos GPS se trazan en el mapa
-export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount, isSelected, unitColors, onToggle, onSetAll, onDelete }) {
+// `onDelete` es opcional (el mapa compartido es de solo lectura); `stopsTo`: a dónde lleva "Paradas"
+export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount, isSelected, unitColors, onToggle, onSetAll, onDelete, stopsTo = '/recorridos' }) {
   // En móvil arranca cerrado para dejar espacio a la lista de registros
   const [open, setOpen] = useState(() => !window.matchMedia('(max-width: 820px)').matches);
   const label = viewLabel(view);
@@ -40,7 +41,7 @@ export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount
               <button onClick={() => onSetAll(false)} className="link-btn">Ninguno</button>
             </>
           )}
-          <Link to="/recorridos" className="link-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>Paradas</Link>
+          <Link to={stopsTo} className="link-btn" style={{ display: 'inline-flex', alignItems: 'center' }}>Paradas</Link>
         </div>
       </div>
 
@@ -68,6 +69,7 @@ export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount
                   </span>
                 </span>
               </label>
+              {onDelete && (
               <button
                 onClick={() => onDelete(t)}
                 className="icon-btn icon-btn-danger"
@@ -76,6 +78,7 @@ export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount
               >
                 <Trash2 size={14} />
               </button>
+              )}
             </div>
           ))}
         </div>

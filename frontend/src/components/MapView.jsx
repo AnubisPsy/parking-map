@@ -1,11 +1,24 @@
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapTypePicker, { MAP_TYPES } from './MapTypePicker';
 import ParkingLayer from './ParkingLayer';
 import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel, parkedStopIds } from './TrackPlayback';
 
 const NO_TRACKS = [];
+const BACKDROP_ZOOM = 15;
+
+// Respaldo con menos detalle: cada mosaico cubre 64 veces más terreno, así que
+// carga aunque el mapa avance rápido (al seguir una unidad con mucho zoom) y se
+// ve borroso en vez de en blanco mientras llegan los nítidos de encima. Se monta
+// solo con zoom cercano: con minZoom, Leaflet falla al animar el zoom por debajo.
+function BackdropLayer({ type }) {
+  const map = useMap();
+  const [zoom, setZoom] = useState(() => map.getZoom());
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) });
+  if (zoom <= BACKDROP_ZOOM) return null;
+  return <TileLayer url={type.url} subdomains={type.subdomains} maxNativeZoom={BACKDROP_ZOOM} zIndex={0} />;
+}
 
 function FitBounds({ parkings, tracks }) {
   const map = useMap();
@@ -51,8 +64,11 @@ export default function MapView({ parkings: latestParkings, unitColors: latestCo
         zoom={12}
         style={{ height: '100%', width: '100%' }}
       >
+        <BackdropLayer key={`${mapType}-fondo`} type={current} />
         <TileLayer
           key={mapType}
+          zIndex={1}
+          keepBuffer={4}
           attribution={current.attr}
           url={current.url}
           subdomains={current.subdomains}

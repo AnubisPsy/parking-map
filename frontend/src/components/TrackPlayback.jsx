@@ -259,7 +259,11 @@ function FollowVehicle({ track, time }) {
   useEffect(() => {
     if (!track || time == null) return;
     const { lat, lng } = positionAt(track, time);
-    map.panTo([lat, lng], { animate: false });
+    // Cada desplazamiento hace que Leaflet recalcule mosaicos, puntos y rutas: con la
+    // unidad quieta no hay nada que mover y se evita repetir ese trabajo en cada cuadro
+    const offset = map.latLngToContainerPoint([lat, lng]).subtract(map.getSize().divideBy(2));
+    if (Math.abs(offset.x) < 1 && Math.abs(offset.y) < 1) return;
+    map.panBy(offset, { animate: false });
   }, [map, track, time]);
   return null;
 }

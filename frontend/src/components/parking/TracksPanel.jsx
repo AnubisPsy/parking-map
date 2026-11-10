@@ -3,11 +3,27 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { NEUTRAL } from '../../lib/colors';
 import { formatDateTimeShort, formatTime } from '../../lib/format';
+import { dayLabel, localDateKey } from '../../lib/parkingGroups';
+
+const shortDay = (day) =>
+  new Date(day + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+
+// Qué parte de la ruta se está viendo, en palabras
+function viewLabel(view) {
+  if (!view) return null;
+  if (view.day) return `Ruta del ${dayLabel(view.day).toLowerCase()}`;
+  if (view.from && view.to) return view.from === view.to ? `Ruta del ${dayLabel(view.from).toLowerCase()}` : `Ruta del ${shortDay(view.from)} al ${shortDay(view.to)}`;
+  if (view.from) return `Ruta desde el ${shortDay(view.from)}`;
+  if (view.to) return `Ruta hasta el ${shortDay(view.to)}`;
+  return null;
+}
 
 // Selector de qué recorridos GPS se trazan en el mapa
-export default function TracksPanel({ tracks, selectedCount, isSelected, unitColors, onToggle, onSetAll, onDelete }) {
+export default function TracksPanel({ tracks, view, onGroupByDate, selectedCount, isSelected, unitColors, onToggle, onSetAll, onDelete }) {
   // En móvil arranca cerrado para dejar espacio a la lista de registros
   const [open, setOpen] = useState(() => !window.matchMedia('(max-width: 820px)').matches);
+  const label = viewLabel(view);
+  const multiDay = !label && tracks.some((t) => localDateKey(t.start) !== localDateKey(t.end));
 
   return (
     <div className="sidebar-section">
@@ -30,7 +46,15 @@ export default function TracksPanel({ tracks, selectedCount, isSelected, unitCol
 
       {open && (
         <div className="track-list">
-          {tracks.length === 0 && <p className="small muted">Sin recorridos en el rango de fechas</p>}
+          {label && <p className="track-view" role="status">{label}</p>}
+          {multiDay && (
+            <p className="small muted">
+              Para ver un solo día, ábrelo en la lista
+              {onGroupByDate ? <> (<button onClick={onGroupByDate} className="link-btn link-inline">agrupar por fecha</button>)</> : null}
+              {' '}o elige fechas arriba.
+            </p>
+          )}
+          {tracks.length === 0 && <p className="small muted">Sin recorridos en {label ? 'esos días' : 'el rango de fechas'}</p>}
           {tracks.map((t) => (
             <div key={t.id} className="track-row">
               <label>

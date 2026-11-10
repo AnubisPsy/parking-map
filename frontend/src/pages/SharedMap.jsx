@@ -4,7 +4,7 @@ import { Clock, MapPin, Search } from 'lucide-react';
 import { useShareData } from '../api/queries';
 import { buildUnitColors } from '../lib/colors';
 import { formatDateTime, plural } from '../lib/format';
-import { tracksInRange } from '../lib/parkingGroups';
+import { clipTracks, trackWindow } from '../lib/parkingGroups';
 import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
 import GroupedParkingList from '../components/parking/GroupedParkingList';
@@ -55,13 +55,15 @@ function SharedMapView({ data }) {
   });
   const { visibleParkings, filterKey, appliedFrom, appliedTo } = filters;
 
-  // Recorridos dentro del rango de fechas y, si hay un grupo seleccionado, solo de sus unidades
+  // Igual que en el mapa privado: el día, la unidad o las fechas elegidas recortan la
+  // ruta; con una sucursal abierta, solo las unidades que pasaron por ella.
   const mapTracks = useMemo(() => {
+    const win = trackWindow({ groupBy: filters.groupBy, filterKey, appliedFrom, appliedTo });
     const units = new Set(visibleParkings.map((p) => p.unit_id));
-    const shown = tracksInRange(tracks, appliedFrom, appliedTo)
-      .filter((t) => filterKey === 'all' || units.has(t.unit_id));
-    return prepareTracks(shown, unitColors, parkings);
-  }, [tracks, parkings, visibleParkings, filterKey, appliedFrom, appliedTo, unitColors]);
+    const shown = clipTracks(tracks, win)
+      .filter((t) => filters.groupBy !== 'address' || filterKey === 'all' || units.has(t.unit_id));
+    return prepareTracks(shown, unitColors, parkings, win);
+  }, [tracks, parkings, visibleParkings, filters.groupBy, filterKey, appliedFrom, appliedTo, unitColors]);
 
   return (
     <div className="page">

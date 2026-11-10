@@ -13,7 +13,7 @@ import {
 } from '../api/queries';
 import { buildUnitColors } from '../lib/colors';
 import { plural } from '../lib/format';
-import { buildGroups, tracksInRange } from '../lib/parkingGroups';
+import { buildGroups, clipTracks, trackWindow } from '../lib/parkingGroups';
 import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
 import { useConfirm } from '../components/ConfirmModal';
@@ -63,13 +63,15 @@ export default function Home() {
   const filters = useParkingFilters(parkings, unitColors);
   const { groupBy, groups, visibleParkings, groupFiltered, highlightId, setHighlightId } = filters;
 
-  const rangeTracks = useMemo(
-    () => tracksInRange(tracks, filters.appliedFrom, filters.appliedTo),
-    [tracks, filters.appliedFrom, filters.appliedTo],
+  // Abrir un día o una unidad en la lista, o elegir fechas, recorta la ruta y el reproductor
+  const trackWin = useMemo(
+    () => trackWindow({ groupBy, filterKey: filters.filterKey, appliedFrom: filters.appliedFrom, appliedTo: filters.appliedTo }),
+    [groupBy, filters.filterKey, filters.appliedFrom, filters.appliedTo],
   );
+  const rangeTracks = useMemo(() => clipTracks(tracks, trackWin), [tracks, trackWin]);
   const mapTracks = useMemo(
-    () => prepareTracks(rangeTracks.filter((t) => !hiddenTrackIds.has(t.id)), unitColors, parkings),
-    [rangeTracks, hiddenTrackIds, unitColors, parkings],
+    () => prepareTracks(rangeTracks.filter((t) => !hiddenTrackIds.has(t.id)), unitColors, parkings, trackWin),
+    [rangeTracks, hiddenTrackIds, unitColors, parkings, trackWin],
   );
 
   function toggleTrack(id) {
@@ -207,6 +209,8 @@ export default function Home() {
           {tracks.length > 0 && (
             <TracksPanel
               tracks={rangeTracks}
+              view={trackWin}
+              onGroupByDate={groupBy === 'date' || groupBy === 'date_unit' ? null : () => filters.changeGroupBy('date')}
               selectedCount={mapTracks.length}
               isSelected={(id) => !hiddenTrackIds.has(id)}
               unitColors={unitColors}

@@ -368,6 +368,12 @@ select.input { cursor: pointer; }
 }
 
 .track-list { margin-top: 8px; max-height: 172px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.track-view {
+  align-self: flex-start; padding: 2px 8px; margin-bottom: 2px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; font-weight: 600;
+}
+.track-view::first-letter { text-transform: uppercase; }
+.link-inline { min-height: 0; padding: 0; font-size: inherit; text-decoration: underline; }
 .track-row { display: flex; align-items: center; gap: 4px; padding: 3px 4px 3px 6px; border-radius: var(--radius-sm); }
 .track-row:hover { background: var(--bg); }
 .track-row label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; font-size: 12px; }

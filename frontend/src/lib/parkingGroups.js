@@ -22,7 +22,7 @@ export function localDateKey(value) {
 
 export const dateKey = (parking) => localDateKey(parking.parking_start || parking.created_at);
 
-const dayLabel = (day) =>
+export const dayLabel = (day) =>
   new Date(day + 'T12:00:00').toLocaleDateString('es-MX', {
     weekday: 'long', day: '2-digit', month: 'short', year: 'numeric',
   });
@@ -120,6 +120,43 @@ export function filterByDateRange(parkings, from, to) {
 }
 
 // Recorridos que se traslapan con el rango de fechas
+// Parte de los recorridos que se ve en el mapa: el día o la unidad abiertos en la
+// lista y, si no, el rango de fechas. `day` solo cuando se abrió un día concreto.
+export function trackWindow({ groupBy, filterKey, appliedFrom, appliedTo }) {
+  const win = { from: appliedFrom || null, to: appliedTo || null, unitId: null, day: null };
+  if (filterKey === 'all') return win;
+  if (groupBy === 'date' || groupBy === 'date_unit') {
+    const [day, unitId] = filterKey.split('||');
+    if (day !== 'sin-fecha') Object.assign(win, { from: day, to: day, day });
+    if (unitId) win.unitId = unitId;
+  } else if (groupBy === 'unit') {
+    win.unitId = filterKey;
+  }
+  return win;
+}
+
+const inDays = (value, { from, to }) => {
+  const day = localDateKey(value);
+  return (!from || day >= from) && (!to || day <= to);
+};
+
+// Recorta cada recorrido a los puntos GPS dentro de la ventana: un recorrido de
+// varios días se reproduce solo en los días elegidos.
+export function clipTracks(tracks, win) {
+  if (!win.from && !win.to && !win.unitId) return tracks;
+  return tracks.flatMap((t) => {
+    if (win.unitId && t.unit_id !== win.unitId) return [];
+    if (!win.from && !win.to) return [t];
+    const points = t.points.filter((p) => inDays(p.t, win));
+    if (!points.length) return [];
+    if (points.length === t.points.length) return [t];
+    return [{ ...t, points, start: points[0].t, end: points[points.length - 1].t }];
+  });
+}
+
+// Las paradas que caen dentro de la ventana
+export const stopInWindow = (parking, win) => !win || inDays(parking.parking_start, win);
+
 export function tracksInRange(tracks, from, to) {
   if (!from && !to) return tracks;
   return tracks.filter((t) => {

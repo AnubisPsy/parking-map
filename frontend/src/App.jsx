@@ -9,6 +9,7 @@ const Reports = lazy(() => import('./pages/Reports'));
 const ReportDetail = lazy(() => import('./pages/ReportDetail'));
 const SharedReport = lazy(() => import('./pages/SharedReport'));
 const SharedTracks = lazy(() => import('./pages/SharedTracks'));
+const SharedMapTracks = lazy(() => import('./pages/SharedMapTracks'));
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/map/:token" element={<SharedMap />} />
+        <Route path="/map/:token/recorridos" element={<SharedMapTracks />} />
         <Route path="/recorridos" element={<Tracks />} />
         <Route path="/recorrido/:token" element={<SharedTracks />} />
         <Route path="/reports" element={<Reports />} />

@@ -4,7 +4,7 @@ import { Clock, Download, Route, Search } from 'lucide-react';
 import { useShareData } from '../api/queries';
 import { buildUnitColors, NEUTRAL } from '../lib/colors';
 import { formatDateTime, plural } from '../lib/format';
-import { localDateKey } from '../lib/parkingGroups';
+import { clipTracks, localDateKey, stopInWindow } from '../lib/parkingGroups';
 import { summarizeTrack } from '../lib/trackSummary';
 import { downloadTracks, TrackDetail, TrackList } from '../components/tracks/TrackReport';
 import { SharedHeader } from '../components/ui/AppHeader';
@@ -48,21 +48,25 @@ export default function SharedTracks() {
   return <SharedTracksView data={data} />;
 }
 
-function SharedTracksView({ data }) {
+// `nav`: secciones del encabezado. `win`: días a los que se recortan los recorridos
+// (las fechas con las que se compartió el mapa).
+export function SharedTracksView({ data, nav, win }) {
   const { tracks, parkings } = data;
   const [searchParams, setSearchParams] = useSearchParams();
   const unitColors = useMemo(() => buildUnitColors([...parkings, ...tracks]), [parkings, tracks]);
-  const summaries = useMemo(
-    () => tracks.map((t) => summarizeTrack(t, parkings)).sort((a, b) => b.start - a.start),
-    [tracks, parkings],
-  );
+  const summaries = useMemo(() => {
+    const shown = win ? clipTracks(tracks, win) : tracks;
+    const stops = win ? parkings.filter((p) => stopInWindow(p, win)) : parkings;
+    return shown.map((t) => summarizeTrack(t, stops)).sort((a, b) => b.start - a.start);
+  }, [tracks, parkings, win]);
   const selected = summaries.find((s) => s.id === searchParams.get('track')) ?? summaries[0];
-  const select = (id) => setSearchParams({ track: id }, { replace: true });
+  // Conserva las fechas y la agrupación del enlace al elegir otro recorrido
+  const select = (id) => setSearchParams((prev) => { prev.set('track', id); return prev; }, { replace: true });
   const single = summaries.length === 1;
 
   return (
     <div className="page">
-      <SharedHeader>
+      <SharedHeader nav={nav}>
         <p className="header-note">Solo lectura · Expira {formatDateTime(data.expires_at)}</p>
       </SharedHeader>
 

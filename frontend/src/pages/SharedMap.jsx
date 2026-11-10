@@ -1,5 +1,5 @@
 import { lazy, Suspense, useMemo } from 'react';
-import { Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { Clock, MapPin, Search } from 'lucide-react';
 import { useShareData } from '../api/queries';
 import { buildUnitColors } from '../lib/colors';
@@ -9,7 +9,7 @@ import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
 import GroupedParkingList from '../components/parking/GroupedParkingList';
 import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarControls';
-import { SharedHeader } from '../components/ui/AppHeader';
+import { SharedHeader, sharedMapNav } from '../components/ui/AppHeader';
 import { ListSkeleton, MapSkeleton } from '../components/ui/Skeleton';
 import { EmptyState, ErrorState, FullPageMessage } from '../components/ui/States';
 
@@ -40,11 +40,12 @@ export default function SharedMap() {
 
   if (data.type === 'report') return <Navigate to={`/report/${token}`} replace />;
   if (data.type === 'tracks') return <Navigate to={`/recorrido/${token}`} replace />;
-  return <SharedMapView data={data} />;
+  return <SharedMapView data={data} token={token} />;
 }
 
-function SharedMapView({ data }) {
+function SharedMapView({ data, token }) {
   const [searchParams] = useSearchParams();
+  const { search } = useLocation();
   const { parkings, tracks } = data;
 
   const unitColors = useMemo(() => buildUnitColors([...parkings, ...tracks]), [parkings, tracks]);
@@ -67,7 +68,7 @@ function SharedMapView({ data }) {
 
   return (
     <div className="page">
-      <SharedHeader>
+      <SharedHeader nav={tracks.length > 0 ? sharedMapNav(token, search) : undefined}>
         <p className="header-note">Solo lectura · Expira {formatDateTime(data.expires_at)}</p>
       </SharedHeader>
 

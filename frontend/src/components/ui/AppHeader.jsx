@@ -28,12 +28,28 @@ export default function AppHeader({ children }) {
   );
 }
 
-// Encabezado de las vistas compartidas: sin navegación hacia la parte privada
-export function SharedHeader({ children }) {
+// Encabezado de las vistas compartidas: sin navegación hacia la parte privada,
+// solo entre las secciones del mismo enlace (`nav`)
+export function SharedHeader({ nav, children }) {
   return (
     <header className="app-header">
       <Brand asLink={false} />
+      {nav && (
+        <nav className="app-nav" aria-label="Secciones">
+          {nav.map(({ to, label, icon: Icon }) => (
+            <NavLink key={label} to={to} end><Icon size={15} /> {label}</NavLink>
+          ))}
+        </nav>
+      )}
       <div className="header-actions">{children}</div>
     </header>
   );
+}
+
+// Secciones de un mapa compartido; conservan las fechas y la agrupación del enlace
+export function sharedMapNav(token, search) {
+  return [
+    { to: `/map/${token}${search}`, label: 'Mapa', icon: MapIcon },
+    { to: `/map/${token}/recorridos${search}`, label: 'Recorridos', icon: Route },
+  ];
 }

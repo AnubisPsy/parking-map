@@ -104,6 +104,7 @@ export const shareSchema = z.object({
   token: z.string(),
   type: z.string().nullish(),
   unit_ids: z.array(z.string()).nullish(),
+  track_count: z.number().nullish(),
   expires_at: z.string(),
   created_at: z.string(),
 });
@@ -120,6 +121,12 @@ export const shareDataSchema = z.discriminatedUnion('type', [
     unit_ids: z.array(z.string()).nullish(),
     parkings: z.array(parkingSchema),
     tracks: z.array(trackSchema).default([]),
+  }),
+  z.object({
+    type: z.literal('tracks'),
+    expires_at: z.string(),
+    tracks: z.array(trackSchema),
+    parkings: z.array(parkingSchema),
   }),
 ]);
 

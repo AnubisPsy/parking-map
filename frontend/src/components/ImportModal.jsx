@@ -1,17 +1,18 @@
 import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useImportParkings } from '../api/queries';
-import { Upload, FileSpreadsheet, CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { readSheetRows, parseParkingRow } from '../utils/excelParse';
-import { formatDateTime, formatDuration } from '../lib/format';
+import { formatDateTime, formatDuration, plural } from '../lib/format';
 import DataTable from './ui/DataTable';
+import DropZone from './ui/DropZone';
 import Modal from './ui/Modal';
 
 const PREVIEW_COLUMNS = [
   { key: 'unit_id', label: 'No.', width: 80 },
   { key: 'unit_name', label: 'Placa', width: 100 },
   { key: 'address', label: 'Sucursal', width: 110 },
-  { key: 'parking_start', label: 'Fecha y Hora', width: 150, render: (v) => formatDateTime(v) },
+  { key: 'parking_start', label: 'Fecha y hora', width: 150, render: (v) => formatDateTime(v) },
   { key: 'latitude', label: 'Coordenadas', width: 170, render: (_, r) => `${r.latitude?.toFixed(5)}, ${r.longitude?.toFixed(5)}` },
   { key: 'parking_duration', label: 'Duración', flex: 1, render: (v) => formatDuration(v) ?? '—' },
 ];
@@ -25,8 +26,7 @@ export default function ImportModal({ onImported, onClose }) {
   const [createdCount, setCreatedCount] = useState(0);
   const inputRef = useRef();
 
-  function handleFile(e) {
-    const file = e.target.files[0];
+  function loadFile(file) {
     if (!file) return;
     setFileName(file.name);
     const reader = new FileReader();
@@ -68,116 +68,80 @@ export default function ImportModal({ onImported, onClose }) {
     if (inputRef.current) inputRef.current.value = '';
   }
 
+  const footer = {
+    preview: (
+      <>
+        <button onClick={reset} className="btn btn-secondary">Elegir otro archivo</button>
+        <button onClick={handleImport} className="btn btn-primary" disabled={rows.length === 0}>
+          Importar {rows.length} {plural(rows.length, 'registro')}
+        </button>
+      </>
+    ),
+    done: (
+      <>
+        {failCount > 0 && <button onClick={reset} className="btn btn-secondary">Importar otro</button>}
+        <button onClick={onClose} className="btn btn-primary">Cerrar</button>
+      </>
+    ),
+  }[phase];
+
   return (
-    <Modal label="Importar desde Excel" onClose={onClose} style={modal}>
-        <div style={modalHeader}>
-          <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 700 }}>
-            <Upload size={18} /> Importar desde Excel
-          </h2>
-          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
+    <Modal
+      title="Importar estacionamientos"
+      description="Desde un archivo Excel del sistema GPS."
+      size={phase === 'preview' ? 'lg' : 'md'}
+      onClose={onClose}
+      footer={footer}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsx,.xls"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Archivo Excel"
+        onChange={(e) => loadFile(e.target.files[0])}
+      />
+
+      {phase === 'pick' && (
+        <DropZone
+          hint="Columnas: No. · Placa · Sucursal · Fecha y Hora · Coordenadas · Duración"
+          onPick={() => inputRef.current.click()}
+          onDropFiles={(files) => loadFile(files[0])}
+        />
+      )}
+
+      {phase === 'preview' && (
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="small muted">
+            <strong style={{ color: 'var(--ink)' }}>{fileName}</strong> · {rows.length} registros válidos
+          </p>
+          <DataTable label="Vista previa de la importación" data={rows} columns={PREVIEW_COLUMNS} maxHeight={320} />
         </div>
+      )}
 
-        <div style={modalBody}>
-          {phase === 'pick' && (
-            <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-              <FileSpreadsheet size={48} color="#64748b" style={{ marginBottom: 16 }} />
-              <p style={{ color: '#475569', marginBottom: 8, fontSize: 14, lineHeight: 1.6 }}>
-                Selecciona un archivo <strong>.xlsx</strong> con las columnas:
-              </p>
-              <p style={{ color: '#475569', fontSize: 12, marginBottom: 24, fontFamily: 'monospace' }}>
-                No. · Placa · Sucursal · Fecha y Hora · Coordenadas · Duración
-              </p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".xlsx,.xls"
-                style={{ display: 'none' }}
-                onChange={handleFile}
-              />
-              <button onClick={() => inputRef.current.click()} style={btnPrimary}>
-                Seleccionar archivo
-              </button>
-            </div>
-          )}
+      {phase === 'importing' && (
+        <div role="status" style={{ padding: '32px 16px', textAlign: 'center' }}>
+          <Loader2 size={28} className="spin" color="var(--accent)" style={{ marginBottom: 10 }} />
+          <p className="muted">Importando {rows.length} registros…</p>
+        </div>
+      )}
 
-          {phase === 'preview' && (
-            <>
-              <div style={{ marginBottom: 12, fontSize: 13, color: '#64748b' }}>
-                <strong style={{ color: '#1e293b' }}>{fileName}</strong>
-                {' — '}
-                <span style={{ color: '#15803d', fontWeight: 600 }}>{rows.length} registros válidos</span>
-              </div>
-              <DataTable label="Vista previa de la importación" data={rows} columns={PREVIEW_COLUMNS} maxHeight={340} />
-              <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <button onClick={reset} style={btnOutline}>Cancelar</button>
-                <button onClick={handleImport} style={btnPrimary} disabled={rows.length === 0}>
-                  Importar {rows.length} registro{rows.length !== 1 ? 's' : ''}
-                </button>
-              </div>
-            </>
-          )}
-
-          {phase === 'importing' && (
-            <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-              <p style={{ fontSize: 14, color: '#64748b', marginBottom: 16 }}>
-                Importando <strong>{rows.length}</strong> registros…
-              </p>
-              <div style={{ height: 6, background: '#e2e8f0', borderRadius: 6, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', width: '100%',
-                  background: 'linear-gradient(90deg, #1d4ed8, #2563eb)',
-                  borderRadius: 6,
-                  animation: 'pulse 1s ease-in-out infinite',
-                }} />
-              </div>
-            </div>
-          )}
-
-          {phase === 'done' && (
-            <div style={{ textAlign: 'center', padding: '32px 16px' }}>
-              {failCount === 0
-                ? <CheckCircle2 size={48} color="#15803d" style={{ marginBottom: 16 }} />
-                : <AlertTriangle size={48} color="#b45309" style={{ marginBottom: 16 }} />
-              }
-              <p style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: '#1e293b' }}>
-                {createdCount} registro{createdCount !== 1 ? 's' : ''} importado{createdCount !== 1 ? 's' : ''} correctamente
-              </p>
-              {failCount > 0 && (
-                <p style={{ fontSize: 13, color: '#b91c1c', marginBottom: 8 }}>
-                  {failCount} fila{failCount !== 1 ? 's' : ''} no se pudo importar
-                </p>
-              )}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
-                {failCount > 0 && (
-                  <button onClick={reset} style={btnOutline}>Importar otro</button>
-                )}
-                <button onClick={onClose} style={btnPrimary}>Cerrar</button>
-              </div>
-            </div>
+      {phase === 'done' && (
+        <div style={{ textAlign: 'center', padding: '20px 16px' }}>
+          {failCount === 0
+            ? <CheckCircle2 size={32} color="var(--success)" style={{ marginBottom: 10 }} />
+            : <AlertTriangle size={32} color="var(--warning)" style={{ marginBottom: 10 }} />}
+          <p style={{ fontSize: 15, fontWeight: 600 }}>
+            {createdCount} {plural(createdCount, 'registro')} {plural(createdCount, 'importado')} correctamente
+          </p>
+          {failCount > 0 && (
+            <p style={{ fontSize: 13, color: 'var(--danger)', marginTop: 4 }}>
+              {failCount} {plural(failCount, 'fila')} no se {failCount === 1 ? 'pudo' : 'pudieron'} importar
+            </p>
           )}
         </div>
+      )}
     </Modal>
   );
 }
-
-const modal = { borderRadius: 16, maxWidth: 740 };
-const modalHeader = {
-  padding: '16px 20px',
-  background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-  color: 'white', display: 'flex', justifyContent: 'space-between',
-  alignItems: 'center', fontSize: 16, fontWeight: 700,
-};
-const modalBody = { padding: '20px 24px' };
-const closeBtn = {
-  background: 'none', border: 'none', color: 'white',
-  cursor: 'pointer', padding: 0, display: 'flex', borderRadius: 4,
-};
-const btnPrimary = {
-  padding: '10px 20px', background: '#2563eb', color: 'white',
-  border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-};
-const btnOutline = {
-  padding: '10px 20px', background: 'transparent', color: '#374151',
-  border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13,
-  fontWeight: 600, cursor: 'pointer',
-};

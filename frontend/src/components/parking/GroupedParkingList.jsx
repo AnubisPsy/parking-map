@@ -1,11 +1,11 @@
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronDown, Info, MapPin, Trash2 } from 'lucide-react';
+import { ChevronDown, Trash2 } from 'lucide-react';
 import { ALL_LABEL, filterByDateRange } from '../../lib/parkingGroups';
 import { NEUTRAL } from '../../lib/colors';
-import { formatDateTimeShort, formatDuration } from '../../lib/format';
+import { formatDateTime, formatDuration } from '../../lib/format';
 
-const ROW_ESTIMATE = { item: 76, default: 42 };
+const ROW_ESTIMATE = { item: 54, default: 38 };
 
 // Aplana el acordeón en filas para poder virtualizarlo
 function buildRows({ groups, groupBy, filters, unitColors, visibleCount, hasDateFilter }) {
@@ -69,10 +69,8 @@ function buildRows({ groups, groupBy, filters, unitColors, visibleCount, hasDate
 }
 
 // Lista de grupos y registros compartida por el mapa principal y el mapa compartido.
-// `onDeleteGroup`, `onDeleteItem` y `onInfoOpen` son opcionales: sin ellos la vista es de solo lectura.
-export default function GroupedParkingList({
-  filters, unitColors, totalCount, visibleCount, onDeleteGroup, onDeleteItem, onInfoOpen, onInfoClose,
-}) {
+// `onDeleteGroup` y `onDeleteItem` son opcionales: sin ellos la vista es de solo lectura.
+export default function GroupedParkingList({ filters, unitColors, totalCount, visibleCount, onDeleteGroup, onDeleteItem }) {
   const { groups, groupBy, appliedFrom, appliedTo } = filters;
   const scrollRef = useRef(null);
   const hasDateFilter = Boolean(appliedFrom || appliedTo);
@@ -94,24 +92,24 @@ export default function GroupedParkingList({
 
   function renderRow(row) {
     switch (row.kind) {
-      case 'all':
+      case 'all': {
+        const selected = filters.filterKey === 'all';
         return (
-          <button
-            style={filters.filterKey === 'all' ? groupBtnActive('#1d4ed8') : groupBtn}
-            onClick={filters.resetSelection}
-            aria-pressed={filters.filterKey === 'all'}
-          >
-            <Dot color="#2563eb" />
-            <span style={{ flex: 1, textAlign: 'left' }}>{ALL_LABEL[groupBy]}</span>
-            <span style={badge}>{totalCount}</span>
-          </button>
+          <div className={`list-row${selected ? ' list-row-selected' : ''}`}>
+            <button className="list-row-main" onClick={filters.resetSelection} aria-pressed={selected}>
+              <span style={{ flex: 1 }}>{ALL_LABEL[groupBy]}</span>
+              <span className="badge">{totalCount}</span>
+            </button>
+          </div>
         );
+      }
       case 'note':
-        return <p style={noteStyle}>{row.text}</p>;
+        return <p className="small muted" style={{ padding: '6px 8px' }}>{row.text}</p>;
       case 'group':
         return (
           <GroupRow
             row={row}
+            showDot={groupBy === 'unit' || Boolean(row.parentKey)}
             onToggle={() => {
               if (row.parentKey) filters.toggleSubgroup(row.key, row.parentKey);
               else if (groupBy === 'date_unit') filters.toggleDateGroup(row.key);
@@ -127,15 +125,13 @@ export default function GroupedParkingList({
             highlighted={filters.highlightId === row.parking.id}
             onSelect={filters.toggleHighlight}
             onDelete={onDeleteItem}
-            onInfoOpen={onInfoOpen}
-            onInfoClose={onInfoClose}
           />
         );
     }
   }
 
   return (
-    <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12 }}>
+    <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px' }}>
       <div role="list" aria-label="Registros de estacionamiento" style={{ position: 'relative', height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((item) => {
           const row = rows[item.index];
@@ -148,8 +144,8 @@ export default function GroupedParkingList({
               style={{
                 position: 'absolute', top: 0, left: 0, width: '100%',
                 transform: `translateY(${item.start}px)`,
-                paddingBottom: 5,
-                paddingLeft: (row.level || 0) * 13,
+                paddingBottom: 2,
+                paddingLeft: (row.level || 0) * 12,
               }}
             >
               {renderRow(row)}
@@ -161,142 +157,66 @@ export default function GroupedParkingList({
   );
 }
 
-function Dot({ color, size = 10 }) {
-  return <span style={{ width: size, height: size, borderRadius: '50%', background: color, flexShrink: 0 }} />;
-}
-
-function GroupRow({ row, onToggle, onDelete }) {
+function GroupRow({ row, showDot, onToggle, onDelete }) {
   const { group, expanded, active, level } = row;
   return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'stretch' }}>
-      <button
-        style={{ ...(active ? groupBtnActive(group.color) : groupBtn), flex: 1, minWidth: 0, fontSize: level ? 12 : 13 }}
-        onClick={onToggle}
-        aria-expanded={expanded}
-      >
-        <Dot color={group.color} size={level ? 8 : 10} />
-        <span style={truncate}>{group.label}</span>
-        <span style={badge}>{group.count}</span>
-        <ChevronDown
-          size={level ? 12 : 14}
-          style={{
-            flexShrink: 0, marginLeft: 4, transition: 'transform 0.2s',
-            transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-            color: active ? group.color : '#64748b',
-          }}
-        />
+    <div className={`list-row${active ? ' list-row-selected' : ''}`}>
+      <button className="list-row-main" onClick={onToggle} aria-expanded={expanded}>
+        {showDot && <span className={`dot${level ? ' dot-sm' : ''}`} style={{ background: group.color }} />}
+        <span className="truncate cap-first" style={{ flex: 1 }}>{group.label}</span>
+        <span className="badge">{group.count}</span>
+        <ChevronDown size={15} className="chevron" />
       </button>
       {onDelete && !level && (
         <button
           onClick={() => onDelete(group)}
-          style={deleteGroupBtn}
+          className="icon-btn icon-btn-danger hover-reveal"
+          style={{ marginRight: 4 }}
           aria-label={`Eliminar registros de ${group.label}`}
           title={`Eliminar registros de ${group.label}`}
         >
-          <Trash2 size={12} />
+          <Trash2 size={14} />
         </button>
       )}
     </div>
   );
 }
 
-function ParkingItem({ row, highlighted, onSelect, onDelete, onInfoOpen, onInfoClose }) {
+function ParkingItem({ row, highlighted, onSelect, onDelete }) {
   const { parking: p, index, color, showUnit, showDate, showAddress } = row;
   const duration = formatDuration(p.parking_duration);
-  const start = formatDateTimeShort(p.parking_start);
+  const details = [showDate && p.parking_start ? formatDateTime(p.parking_start) : null, showAddress ? p.address : null]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <div
-      style={{
-        display: 'flex', alignItems: 'flex-start', gap: 4,
-        background: highlighted ? '#eff6ff' : '#f8fafc',
-        border: `1px solid ${highlighted ? '#2563eb' : '#e2e8f0'}`,
-        borderLeft: `3px solid ${color}`,
-        borderRadius: 8,
-      }}
-    >
-      <button onClick={() => onSelect(p.id)} aria-pressed={highlighted} style={itemBtn}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: highlighted ? '#1d4ed8' : '#1e293b' }}>#{index + 1}</span>
-          {showUnit && (
-            <span style={{ fontSize: 10, fontWeight: 700, color: 'white', background: color, padding: '1px 6px', borderRadius: 20 }}>
-              {p.unit_name || p.unit_id}
-            </span>
-          )}
-          {duration && (
-            <span style={{ fontSize: 11, fontWeight: 600, color: highlighted ? '#1d4ed8' : '#374151' }}>{duration}</span>
-          )}
-          {highlighted && (
-            <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#1d4ed8', fontWeight: 700 }}>
-              <MapPin size={10} /> en mapa
-            </span>
-          )}
+    <div className={`list-row item-row${highlighted ? ' list-row-selected' : ''}`}>
+      <button onClick={() => onSelect(p.id)} aria-pressed={highlighted} className="item-main">
+        <span className="item-top">
+          <span className="dot dot-sm" style={{ background: color }} />
+          <span style={{ fontWeight: 600 }} className="truncate">
+            {showUnit ? (p.unit_name || p.unit_id) : `Parada ${index + 1}`}
+          </span>
+          {duration && <span className="muted" style={{ marginLeft: 'auto', flexShrink: 0 }}>{duration}</span>}
         </span>
-        {showDate && start && (
-          <span style={{ display: 'block', fontSize: 11, color: '#475569', marginBottom: 2 }}>{start}</span>
-        )}
-        {showAddress && p.address && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 10, color: '#475569', minWidth: 0 }}>
-            <MapPin size={9} style={{ flexShrink: 0 }} />
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.address}</span>
+        {details && (
+          <span className="item-sub">
+            <span className="truncate">{details}</span>
           </span>
         )}
       </button>
-      {(onInfoOpen || onDelete) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, padding: '6px 6px 0 0' }}>
-          {onInfoOpen && (
-            <button
-              onMouseEnter={(e) => onInfoOpen(e, p, color)}
-              onMouseLeave={onInfoClose}
-              onFocus={(e) => onInfoOpen(e, p, color)}
-              onBlur={onInfoClose}
-              onClick={(e) => onInfoOpen(e, p, color)}
-              style={iconBtn}
-              aria-label={`Ver detalles del registro ${index + 1}`}
-            >
-              <Info size={12} />
-            </button>
-          )}
-          {onDelete && (
-            <button
-              onClick={() => onDelete(p.id)}
-              style={iconBtn}
-              aria-label={`Eliminar registro ${index + 1}`}
-              title="Eliminar"
-            >
-              <Trash2 size={12} />
-            </button>
-          )}
+      {onDelete && (
+        <div className="row-actions">
+          <button
+            onClick={() => onDelete(p.id)}
+            className="icon-btn icon-btn-danger hover-reveal"
+            aria-label={`Eliminar registro ${index + 1}`}
+            title="Eliminar"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
       )}
     </div>
   );
 }
-
-const truncate = { flex: 1, minWidth: 0, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
-const groupBtn = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-  background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8,
-  cursor: 'pointer', fontSize: 13, width: '100%', color: '#374151',
-};
-const groupBtnActive = (color) => ({
-  ...groupBtn, background: `${color}18`, border: `1px solid ${color}`, color: '#0f172a', fontWeight: 700,
-});
-const badge = {
-  background: '#e2e8f0', color: '#334155', fontSize: 11, fontWeight: 700,
-  padding: '1px 7px', borderRadius: 20, flexShrink: 0,
-};
-const noteStyle = { fontSize: 12, color: '#475569', padding: '6px 10px' };
-const deleteGroupBtn = {
-  padding: '0 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8,
-  cursor: 'pointer', color: '#b91c1c', display: 'flex', alignItems: 'center', flexShrink: 0,
-};
-const itemBtn = {
-  flex: 1, minWidth: 0, display: 'block', textAlign: 'left', background: 'none', border: 'none',
-  padding: '8px 4px 8px 10px', cursor: 'pointer', color: 'inherit', borderRadius: 6,
-};
-const iconBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
-  width: 24, height: 24, borderRadius: 4,
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};

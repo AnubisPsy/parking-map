@@ -12,7 +12,7 @@ export function prepareTracks(tracks, unitColors, parkings) {
         .filter((p) => p.track_id === t.id && p.parking_start)
         .map((p) => {
           const ms = new Date(p.parking_start).getTime();
-          return { ms, endMs: ms + (p.parking_duration || 0) * 60000, duration: p.parking_duration || 0 };
+          return { id: p.id, ms, endMs: ms + (p.parking_duration || 0) * 60000, duration: p.parking_duration || 0 };
         })
         .sort((a, b) => a.ms - b.ms);
       return {

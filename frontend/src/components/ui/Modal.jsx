@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { X } from 'lucide-react';
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -7,7 +8,9 @@ const stack = [];
 
 // Diálogo accesible: Esc cierra, Tab queda dentro y el foco vuelve al botón que lo abrió.
 // Para enfocar un control al abrir, márcalo con data-autofocus.
-export default function Modal({ label, onClose, closeOnBackdrop = false, style, overlayStyle, children }) {
+export default function Modal({
+  title, description, size = 'md', footer, footerBetween = false, closeOnBackdrop = false, onClose, children,
+}) {
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -52,30 +55,20 @@ export default function Modal({ label, onClose, closeOnBackdrop = false, style, 
 
   return (
     <div
-      style={{ ...overlayBase, ...overlayStyle }}
+      className="modal-overlay"
       onClick={closeOnBackdrop ? (e) => { if (e.target === e.currentTarget) onClose(); } : undefined}
     >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={label}
-        tabIndex={-1}
-        style={{ ...dialogBase, ...style }}
-      >
-        {children}
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} className={`modal modal-${size}`}>
+        <div className="modal-head">
+          <div style={{ minWidth: 0 }}>
+            <h2 className="modal-title">{title}</h2>
+            {description && <p className="modal-description">{description}</p>}
+          </div>
+          <button onClick={onClose} className="icon-btn" aria-label="Cerrar"><X size={18} /></button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer && <div className={`modal-foot${footerBetween ? ' modal-foot-between' : ''}`}>{footer}</div>}
       </div>
     </div>
   );
 }
-
-const overlayBase = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  zIndex: 3000, padding: 16,
-};
-const dialogBase = {
-  background: 'white', borderRadius: 14, width: '100%',
-  maxHeight: 'calc(100dvh - 32px)', overflow: 'auto',
-  boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-};

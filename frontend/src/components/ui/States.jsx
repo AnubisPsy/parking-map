@@ -1,19 +1,13 @@
-import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw } from 'lucide-react';
 
 export function ErrorState({ message, onRetry, title = 'No se pudieron cargar los datos', style }) {
   return (
-    <div
-      role="alert"
-      style={{
-        background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10,
-        padding: 16, textAlign: 'center', ...style,
-      }}
-    >
-      <AlertTriangle size={26} color="#b91c1c" style={{ marginBottom: 8 }} />
-      <p style={{ fontWeight: 700, fontSize: 14, color: '#7f1d1d', marginBottom: 4 }}>{title}</p>
-      {message && <p style={{ fontSize: 13, color: '#7f1d1d', marginBottom: 12 }}>{message}</p>}
+    <div role="alert" style={{ textAlign: 'center', padding: '28px 20px', ...style }}>
+      <AlertCircle size={28} color="var(--danger)" style={{ marginBottom: 8 }} />
+      <p style={{ fontWeight: 600, marginBottom: 2 }}>{title}</p>
+      {message && <p className="small muted" style={{ marginBottom: 14 }}>{message}</p>}
       {onRetry && (
-        <button onClick={onRetry} style={retryBtn}>
+        <button onClick={onRetry} className="btn btn-secondary">
           <RefreshCw size={14} /> Reintentar
         </button>
       )}
@@ -23,11 +17,15 @@ export function ErrorState({ message, onRetry, title = 'No se pudieron cargar lo
 
 export function EmptyState({ icon: Icon, title, description, action, style }) {
   return (
-    <div style={{ textAlign: 'center', padding: '40px 20px', ...style }}>
-      {Icon && <Icon size={40} color="#64748b" style={{ marginBottom: 12 }} />}
-      <p style={{ fontWeight: 700, fontSize: 15, color: '#334155', marginBottom: 4 }}>{title}</p>
-      {description && <p style={{ fontSize: 13, color: '#475569' }}>{description}</p>}
-      {action && <div style={{ marginTop: 16 }}>{action}</div>}
+    <div style={{ textAlign: 'center', padding: '40px 24px', ...style }}>
+      {Icon && (
+        <span style={{ display: 'inline-flex', padding: 12, marginBottom: 12, background: 'var(--surface-2)', borderRadius: '50%', color: 'var(--ink-2)' }}>
+          <Icon size={22} />
+        </span>
+      )}
+      <p style={{ fontWeight: 600, fontSize: 15, marginBottom: 2 }}>{title}</p>
+      {description && <p className="muted" style={{ fontSize: 13 }}>{description}</p>}
+      {action && <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>{action}</div>}
     </div>
   );
 }
@@ -35,19 +33,8 @@ export function EmptyState({ icon: Icon, title, description, action, style }) {
 // Mensaje a pantalla completa para rutas que no tienen nada más que mostrar
 export function FullPageMessage({ children }) {
   return (
-    <main
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        height: '100dvh', gap: 12, padding: 20, textAlign: 'center', background: '#eef2f7',
-      }}
-    >
+    <main style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100dvh', gap: 10, padding: 20, textAlign: 'center' }}>
       {children}
     </main>
   );
 }
-
-const retryBtn = {
-  display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-  background: '#b91c1c', color: 'white', border: 'none', borderRadius: 8,
-  fontSize: 13, fontWeight: 600, cursor: 'pointer',
-};

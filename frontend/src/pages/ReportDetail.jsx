@@ -2,7 +2,6 @@ import { lazy, Suspense, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Search, Share2 } from 'lucide-react';
 import { useReport } from '../api/queries';
-import { outlineBtn } from '../components/report/parts';
 import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ReportSkeleton } from '../components/ui/Skeleton';
 import { ErrorState, FullPageMessage } from '../components/ui/States';
@@ -22,17 +21,17 @@ export default function ReportDetail() {
       <FullPageMessage>
         {error.status === 404 ? (
           <>
-            <Search size={48} color="#64748b" />
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>Reporte no encontrado</h1>
-            <p style={{ color: '#475569', fontSize: 14 }}>Es posible que haya sido eliminado.</p>
+            <Search size={36} color="var(--ink-3)" />
+            <h1 className="page-title">Reporte no encontrado</h1>
+            <p className="muted">Es posible que haya sido eliminado.</p>
           </>
         ) : (
           <>
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>Reporte</h1>
-            <ErrorState message={error.message} onRetry={refetch} style={{ maxWidth: 420 }} />
+            <h1 className="page-title">Reporte</h1>
+            <ErrorState message={error.message} onRetry={refetch} />
           </>
         )}
-        <Link to="/reports" style={{ color: '#1d4ed8', fontSize: 14, fontWeight: 600 }}>Volver a reportes</Link>
+        <Link to="/reports" className="btn btn-secondary">Volver a reportes</Link>
       </FullPageMessage>
     );
   }
@@ -45,8 +44,8 @@ export default function ReportDetail() {
         report={report}
         backTo="/reports"
         actions={(
-          <button onClick={() => setShowShare(true)} style={outlineBtn}>
-            <Share2 size={14} /> Compartir
+          <button onClick={() => setShowShare(true)} className="btn btn-secondary">
+            <Share2 size={15} /> Compartir
           </button>
         )}
       />

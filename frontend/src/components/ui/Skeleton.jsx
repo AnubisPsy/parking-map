@@ -11,7 +11,7 @@ function Loading({ label, style, className, children }) {
   );
 }
 
-export function ListSkeleton({ rows = 6, rowHeight = 38, label = 'Cargando registros' }) {
+export function ListSkeleton({ rows = 7, rowHeight = 34, label = 'Cargando registros' }) {
   return (
     <Loading label={label} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {Array.from({ length: rows }, (_, i) => <Skeleton key={i} height={rowHeight} />)}
@@ -30,16 +30,16 @@ export function MapSkeleton({ label = 'Cargando mapa' }) {
 // Reporte completo: encabezado, pestañas, tarjetas y gráficas
 export function ReportSkeleton() {
   return (
-    <Loading label="Cargando reporte" className="page page-report">
-      <div style={{ background: '#0f172a', height: 78, flexShrink: 0 }} />
-      <div style={{ background: 'white', height: 48, flexShrink: 0, borderBottom: '1px solid #e8ecf0' }} />
+    <Loading label="Cargando reporte" className="page">
+      <div style={{ background: 'var(--surface)', minHeight: 'var(--header-height)', borderBottom: '1px solid var(--border)', flexShrink: 0 }} />
+      <div style={{ background: 'var(--surface)', height: 116, borderBottom: '1px solid var(--border)', flexShrink: 0 }} />
       <div className="scroll-body" style={{ overflow: 'hidden' }}>
-        <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))' }}>
-            {[0, 1, 2].map((i) => <Skeleton key={i} height={92} radius={16} />)}
+        <div className="content">
+          <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))' }}>
+            {[0, 1, 2].map((i) => <Skeleton key={i} height={82} radius={12} />)}
           </div>
           <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' }}>
-            {[0, 1, 2, 3].map((i) => <Skeleton key={i} height={240} radius={16} />)}
+            {[0, 1, 2, 3].map((i) => <Skeleton key={i} height={240} radius={12} />)}
           </div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function ReportSkeleton() {
 export function PageSkeleton() {
   return (
     <Loading label="Cargando página" className="page">
-      <div style={{ background: '#1d4ed8', height: 60, flexShrink: 0 }} />
+      <div style={{ background: 'var(--surface)', minHeight: 'var(--header-height)', borderBottom: '1px solid var(--border)', flexShrink: 0 }} />
       <div style={{ flex: 1, minHeight: 0, padding: 16 }}>
         <Skeleton height="100%" radius={12} />
       </div>

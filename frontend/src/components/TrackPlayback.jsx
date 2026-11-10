@@ -3,7 +3,7 @@ import { Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import {
   Play, Pause, SkipBack, SkipForward, StepBack, StepForward,
-  ChevronsLeft, ChevronsRight, Crosshair, Minimize2, Route,
+  ChevronsLeft, ChevronsRight, Crosshair, Minimize2, Route, LocateFixed,
 } from 'lucide-react';
 
 const SPEEDS = [1, 10, 30, 60, 120, 300, 600];
@@ -61,7 +61,7 @@ function trackStatus(track, ms) {
   if (ms < track.startMs) return { text: 'Sin iniciar', moving: false };
   if (ms > track.endMs) return { text: 'Fin del recorrido', moving: false };
   const stop = track.stops.find(s => ms >= s.ms && ms <= s.endMs);
-  if (stop) return { text: `Estacionado · ${fmtDur(stop.duration)}`, moving: false };
+  if (stop) return { text: `Estacionado · ${fmtDur(stop.duration)}`, moving: false, parked: true };
   const { idx } = positionAt(track, ms);
   const a = track.pts[idx], b = track.pts[Math.min(idx + 1, track.pts.length - 1)];
   const hours = (b.ms - a.ms) / 3600000;
@@ -185,7 +185,8 @@ function TrackPoints({ tracks, onSeek }) {
 
 // Rutas completas (tenues) + puntos GPS. No dependen del tiempo, por eso van
 // memorizadas y no se redibujan en cada cuadro de la animación.
-export const TrackStaticLayers = memo(function TrackStaticLayers({ tracks, onSeek }) {
+export const TrackStaticLayers = memo(function TrackStaticLayers({ tracks, onSeek, showRoute = true }) {
+  if (!showRoute) return null;
   return (
     <>
       {tracks.map(t => (
@@ -213,9 +214,7 @@ function vehicleIcon(color, label) {
     iconSize: [28, 28],
     iconAnchor: [14, 14],
     html: `<div style="position:relative;width:28px;height:28px">
-      <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);background:${color};color:white;
-        font-size:11px;font-weight:700;padding:1px 7px;border-radius:10px;white-space:nowrap;
-        box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(label)}</div>
+      <div style="position:absolute;bottom:32px;left:50%;transform:translateX(-50%);background:white;color:#1a1a18;font-size:11px;font-weight:600;padding:1px 7px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35)">${escapeHtml(label)}</div>
       <div style="width:28px;height:28px;border-radius:50%;background:${color};border:3px solid white;
         box-shadow:0 2px 8px rgba(0,0,0,.45);box-sizing:border-box;display:flex;align-items:center;justify-content:center">
         <svg class="vehicle-arrow" width="14" height="14" viewBox="0 0 24 24" style="transition:transform .2s">
@@ -226,7 +225,7 @@ function vehicleIcon(color, label) {
   });
 }
 
-function Vehicle({ track, time }) {
+function Vehicle({ track, time, showRoute }) {
   const markerRef = useRef(null);
   const headingRef = useRef(0);
   const icon = useMemo(() => vehicleIcon(track.color, track.unit_id), [track.color, track.unit_id]);
@@ -241,7 +240,7 @@ function Vehicle({ track, time }) {
     if (el) el.style.transform = `rotate(${headingRef.current}deg)`;
   });
 
-  const traveled = time > track.startMs
+  const traveled = showRoute && time > track.startMs
     ? [...track.pts.slice(0, pos.idx + 1).map(p => [p.lat, p.lng]), [pos.lat, pos.lng]]
     : null;
 
@@ -265,19 +264,25 @@ function FollowVehicle({ track, time }) {
   return null;
 }
 
-export function TrackDynamicLayers({ tracks, time, followTrack }) {
+export function TrackDynamicLayers({ tracks, time, followTrack, showRoute = true }) {
   if (time == null) return null;
   return (
     <>
-      {tracks.map(t => <Vehicle key={t.id} track={t} time={time} />)}
+      {tracks.map(t => <Vehicle key={t.id} track={t} time={time} showRoute={showRoute} />)}
       {followTrack && <FollowVehicle track={followTrack} time={time} />}
     </>
   );
 }
 
+// Estacionamientos en los que alguna unidad está parada en el instante `ms`
+export function parkedStopIds(tracks, ms) {
+  if (ms == null) return [];
+  return tracks.flatMap(t => t.stops.filter(s => s.id && ms >= s.ms && ms <= s.endMs).map(s => s.id));
+}
+
 // ── Panel flotante de reproducción ─────────────────────────────────
 
-export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
+export function PlaybackPanel({ tracks, playback, followId, setFollowId, showRoute, setShowRoute }) {
   const { range, time, playing, setPlaying, speed, setSpeed, seek, togglePlay } = playback;
   // En móvil el panel taparía casi todo el mapa: arranca minimizado
   const [minimized, setMinimized] = useState(() => window.matchMedia('(max-width: 820px)').matches);
@@ -305,49 +310,52 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
 
   if (minimized) {
     return (
-      <button onClick={() => setMinimized(false)} style={{ ...panelBase, ...minimizedBtn }} aria-label={`Abrir reproductor, ${fmtClock(time)}`}>
-        <Route size={15} color="#2563eb" />
-        <span style={{ fontWeight: 700 }}>{fmtClock(time)}</span>
+      <button onClick={() => setMinimized(false)} className="map-control player player-mini" aria-label={`Abrir reproductor, ${fmtClock(time)}`}>
+        <Route size={15} color="var(--accent)" />
+        <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{fmtClock(time)}</span>
         {playing ? <Pause size={14} /> : <Play size={14} />}
       </button>
     );
   }
 
   return (
-    <div style={{ ...panelBase, ...panelStyle }}>
-      {/* Hora actual + cerrar */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 20, fontWeight: 800, color: '#1e293b', fontVariantNumeric: 'tabular-nums' }}>
-          {fmtClock(time)}
-        </span>
-        <span style={{ fontSize: 12, color: '#64748b', textTransform: 'capitalize' }}>{fmtDay(time)}</span>
-        <button onClick={() => setMinimized(true)} style={{ ...iconBtn, marginLeft: 'auto' }} title="Minimizar" aria-label="Minimizar reproductor">
+    <div className="map-control player">
+      <div className="row">
+        <span className="player-clock">{fmtClock(time)}</span>
+        <span className="small muted cap-first">{fmtDay(time)}</span>
+        <button
+          onClick={() => setShowRoute(v => !v)}
+          className="player-toggle"
+          style={{ marginLeft: 'auto' }}
+          aria-pressed={showRoute}
+          title={showRoute ? 'Ocultar la ruta y dejar solo los estacionamientos' : 'Mostrar la ruta recorrida'}
+        >
+          <Route size={14} /> Ruta
+        </button>
+        <button onClick={() => setMinimized(true)} className="icon-btn" title="Minimizar" aria-label="Minimizar reproductor">
           <Minimize2 size={14} />
         </button>
       </div>
 
-      {/* Estado por unidad */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 96, overflowY: 'auto', marginBottom: 8 }}>
+      <div className="player-units">
         {tracks.map(t => {
           const st = trackStatus(t, time);
           const following = followId === t.id;
           return (
-            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: t.color, flexShrink: 0 }} />
-              <span style={{ fontWeight: 600, color: '#374151', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.label}
-              </span>
-              <span style={{ marginLeft: 'auto', color: st.moving ? '#15803d' : '#64748b', fontWeight: st.moving ? 700 : 500, flexShrink: 0 }}>
+            <div key={t.id} className="player-unit">
+              <span className="dot dot-sm" style={{ background: t.color }} />
+              <span className="truncate" style={{ fontWeight: 500 }}>{t.label}</span>
+              <span className={`player-status${st.parked ? ' player-status-parked' : ''}`} style={{ color: st.moving ? 'var(--ink)' : undefined, fontWeight: st.moving ? 600 : undefined }}>
                 {st.text}
               </span>
               <button
                 onClick={() => setFollowId(following ? null : t.id)}
-                style={{ ...iconBtn, color: following ? '#2563eb' : '#64748b' }}
-                title={following ? 'Dejar de seguir' : 'Seguir esta unidad'}
-                aria-label={`Seguir a ${t.unit_id}`}
+                className="follow-btn"
+                title={following ? 'Dejar de seguir: el mapa ya no se moverá con la unidad' : 'Centrar el mapa en la unidad mientras avanza'}
                 aria-pressed={following}
               >
-                <Crosshair size={14} />
+                {following ? <LocateFixed size={14} /> : <Crosshair size={14} />}
+                Seguir<span className="sr-only"> a {t.unit_id}</span>
               </button>
             </div>
           );
@@ -356,7 +364,7 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
 
       {/* Línea de tiempo con las paradas marcadas. Atajo solo para ratón:
           con teclado se llega con "Parada anterior" y "Parada siguiente". */}
-      <div style={{ position: 'relative', height: 10, marginBottom: 2 }}>
+      <div className="player-timeline">
         {tracks.flatMap(t => t.stops.map((s, i) => (
           <button
             key={`${t.id}-${i}`}
@@ -364,12 +372,11 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
             title={`${t.unit_id} · Estacionado ${fmtDur(s.duration)} desde ${fmtClock(s.ms)}`}
             tabIndex={-1}
             aria-hidden="true"
+            className="player-stop"
             style={{
-              position: 'absolute', top: 2, height: 6, borderRadius: 3, cursor: 'pointer',
-              border: 'none', padding: 0,
               left: `${((s.ms - range.min) / span) * 100}%`,
               width: `max(4px, ${((Math.min(s.endMs, range.max) - s.ms) / span) * 100}%)`,
-              background: t.color, opacity: 0.55,
+              background: t.color,
             }}
           />
         )))}
@@ -383,28 +390,27 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
         onChange={e => seek(Number(e.target.value))}
         aria-label="Línea de tiempo"
         aria-valuetext={`${fmtDay(time)} ${fmtClock(time)}`}
-        style={{ width: '100%', accentColor: '#2563eb', cursor: 'pointer', margin: 0 }}
+        className="player-range"
       />
-      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#475569', marginBottom: 8 }}>
+      <div className="row-between muted" style={{ fontSize: 11, marginBottom: 6 }}>
         <span>{fmtDay(range.min)} {fmtClock(range.min)}</span>
         <span>{fmtDay(range.max)} {fmtClock(range.max)}</span>
       </div>
 
-      {/* Controles */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <button onClick={() => { setPlaying(false); seek(range.min); }} style={ctrlBtn} title="Ir al inicio" aria-label="Ir al inicio"><SkipBack size={15} /></button>
-        <button onClick={() => jump(stopTimes, -1)} style={ctrlBtn} title="Parada anterior" aria-label="Parada anterior" disabled={!stopTimes.length}><ChevronsLeft size={16} /></button>
-        <button onClick={() => jump(pointTimes, -1)} style={ctrlBtn} title="Punto anterior" aria-label="Punto anterior"><StepBack size={15} /></button>
-        <button onClick={togglePlay} style={playBtn} title={playing ? 'Pausar' : 'Reproducir'} aria-label={playing ? 'Pausar' : 'Reproducir'}>
-          {playing ? <Pause size={18} /> : <Play size={18} />}
+      <div className="player-controls">
+        <button onClick={() => { setPlaying(false); seek(range.min); }} className="icon-btn" title="Ir al inicio" aria-label="Ir al inicio"><SkipBack size={15} /></button>
+        <button onClick={() => jump(stopTimes, -1)} className="icon-btn" title="Parada anterior" aria-label="Parada anterior" disabled={!stopTimes.length}><ChevronsLeft size={16} /></button>
+        <button onClick={() => jump(pointTimes, -1)} className="icon-btn" title="Punto anterior" aria-label="Punto anterior"><StepBack size={15} /></button>
+        <button onClick={togglePlay} className="player-play" title={playing ? 'Pausar' : 'Reproducir'} aria-label={playing ? 'Pausar' : 'Reproducir'}>
+          {playing ? <Pause size={17} /> : <Play size={17} />}
         </button>
-        <button onClick={() => jump(pointTimes, 1)} style={ctrlBtn} title="Punto siguiente" aria-label="Punto siguiente"><StepForward size={15} /></button>
-        <button onClick={() => jump(stopTimes, 1)} style={ctrlBtn} title="Parada siguiente" aria-label="Parada siguiente" disabled={!stopTimes.length}><ChevronsRight size={16} /></button>
-        <button onClick={() => { setPlaying(false); seek(range.max); }} style={ctrlBtn} title="Ir al final" aria-label="Ir al final"><SkipForward size={15} /></button>
+        <button onClick={() => jump(pointTimes, 1)} className="icon-btn" title="Punto siguiente" aria-label="Punto siguiente"><StepForward size={15} /></button>
+        <button onClick={() => jump(stopTimes, 1)} className="icon-btn" title="Parada siguiente" aria-label="Parada siguiente" disabled={!stopTimes.length}><ChevronsRight size={16} /></button>
+        <button onClick={() => { setPlaying(false); seek(range.max); }} className="icon-btn" title="Ir al final" aria-label="Ir al final"><SkipForward size={15} /></button>
         <select
           value={speed}
           onChange={e => setSpeed(Number(e.target.value))}
-          style={speedSelect}
+          className="input input-sm player-speed"
           title="Velocidad de reproducción"
           aria-label="Velocidad de reproducción"
         >
@@ -414,31 +420,3 @@ export function PlaybackPanel({ tracks, playback, followId, setFollowId }) {
     </div>
   );
 }
-
-const panelBase = {
-  position: 'absolute', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 1000,
-  background: 'white', borderRadius: 12, boxShadow: '0 6px 24px rgba(0,0,0,0.25)',
-  fontFamily: 'inherit',
-};
-const panelStyle = { width: 'min(460px, calc(100% - 24px))', padding: '12px 14px', boxSizing: 'border-box' };
-const minimizedBtn = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', border: 'none',
-  cursor: 'pointer', fontSize: 13, color: '#1e293b',
-};
-const iconBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
-  display: 'flex', padding: 2, borderRadius: 4,
-};
-const ctrlBtn = {
-  background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer',
-  color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  width: 32, height: 32, padding: 0,
-};
-const playBtn = {
-  ...ctrlBtn, width: 40, height: 40, borderRadius: '50%',
-  background: '#2563eb', border: 'none', color: 'white',
-};
-const speedSelect = {
-  marginLeft: 'auto', padding: '6px 8px', border: '1px solid #e2e8f0', borderRadius: 8,
-  fontSize: 12, fontFamily: 'inherit', color: '#374151', cursor: 'pointer', background: 'white',
-};

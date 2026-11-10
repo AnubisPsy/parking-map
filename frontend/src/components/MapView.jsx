@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import MapTypePicker, { MAP_TYPES } from './MapTypePicker';
 import ParkingLayer from './ParkingLayer';
-import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel } from './TrackPlayback';
+import { usePlayback, TrackStaticLayers, TrackDynamicLayers, PlaybackPanel, parkedStopIds } from './TrackPlayback';
 
 const NO_TRACKS = [];
 
@@ -29,6 +29,11 @@ export default function MapView({ parkings: latestParkings, unitColors: latestCo
   const [mapType, setMapType] = useState('hybrid');
   const playback = usePlayback(tracks);
   const [followId, setFollowId] = useState(null);
+  const [showRoute, setShowRoute] = useState(true);
+  // Texto estable: la capa de pines solo se actualiza al llegar o salir de una parada,
+  // no en cada cuadro de la animación
+  const parkedKey = parkedStopIds(tracks, playback.time).sort().join('|');
+  const parkedIds = useMemo(() => new Set(parkedKey ? parkedKey.split('|') : []), [parkedKey]);
   const followTrack = tracks.find(t => t.id === followId) || null;
   const current = MAP_TYPES.find(t => t.id === mapType);
 
@@ -53,18 +58,19 @@ export default function MapView({ parkings: latestParkings, unitColors: latestCo
           subdomains={current.subdomains}
         />
         {(parkings.length > 0 || tracks.length > 0) && <FitBounds parkings={parkings} tracks={tracks} />}
-        <TrackStaticLayers tracks={tracks} onSeek={playback.seek} />
+        <TrackStaticLayers tracks={tracks} onSeek={playback.seek} showRoute={showRoute} />
         <ParkingLayer
           parkings={parkings}
           unitColors={unitColors}
           highlightId={highlightId}
           onMarkerClick={onMarkerClick}
+          parkedIds={parkedIds}
         />
-        <TrackDynamicLayers tracks={tracks} time={playback.time} followTrack={followTrack} />
+        <TrackDynamicLayers tracks={tracks} time={playback.time} followTrack={followTrack} showRoute={showRoute} />
       </MapContainer>
 
       {tracks.length > 0 && (
-        <PlaybackPanel tracks={tracks} playback={playback} followId={followId} setFollowId={setFollowId} />
+        <PlaybackPanel tracks={tracks} playback={playback} followId={followId} setFollowId={setFollowId} showRoute={showRoute} setShowRoute={setShowRoute} />
       )}
 
       <MapTypePicker value={mapType} onChange={setMapType} />

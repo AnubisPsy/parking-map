@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { Upload, FileSpreadsheet, X, Check, AlertTriangle, Loader2 } from 'lucide-react';
+import { Check, AlertTriangle, Loader2 } from 'lucide-react';
+import DropZone from './ui/DropZone';
 import { useCreateReport } from '../api/queries';
 import Modal from './ui/Modal';
 
@@ -292,139 +293,82 @@ export default function ReportImportModal({ onClose }) {
   }
 
   return (
-    <Modal label="Importar reporte semanal" onClose={onClose} style={modal}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <FileSpreadsheet size={22} color="#2563eb" />
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1e293b' }}>Importar Reporte Semanal</h2>
-          </div>
-          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
+    <Modal
+      title="Importar reporte semanal"
+      description="Desde el archivo Excel semanal."
+      onClose={step === 'saving' ? () => {} : onClose}
+      footer={step === 'preview' && parsed ? (
+        <>
+          <button onClick={() => { setStep('pick'); setParsed(null); }} className="btn btn-secondary">
+            Cambiar archivo
+          </button>
+          <button onClick={handleSave} disabled={!weekLabel.trim()} className="btn btn-primary">
+            <Check size={15} /> Guardar reporte
+          </button>
+        </>
+      ) : null}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsm,.xlsx"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Archivo Excel"
+        onChange={e => handleFile(e.target.files[0])}
+      />
+
+      {step === 'pick' && (
+        <div className="stack" style={{ gap: 12 }}>
+          <DropZone
+            hint="Formatos: .xlsm, .xlsx"
+            busy={parsing}
+            onPick={() => inputRef.current.click()}
+            onDropFiles={(files) => handleFile(files[0])}
+          />
+          {parseError && <div role="alert" className="notice notice-error"><AlertTriangle size={15} /> {parseError}</div>}
         </div>
+      )}
 
-        {/* Step: pick file */}
-        {step === 'pick' && (
-          <div>
-            <button
-              type="button"
-              onClick={() => inputRef.current.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
-              style={dropZone}
-            >
-              {parsing ? <Loader2 size={36} color="#2563eb" className="spin" /> : <Upload size={36} color="#64748b" />}
-              <span style={{ display: 'block', fontWeight: 600, color: '#374151', marginTop: 8 }}>
-                {parsing ? 'Procesando archivo...' : 'Arrastra el archivo aquí o haz click'}
-              </span>
-              <span style={{ display: 'block', fontSize: 12, color: '#475569', marginTop: 4 }}>Formatos: .xlsm, .xlsx</span>
-            </button>
-            <input ref={inputRef} type="file" accept=".xlsm,.xlsx" style={{ display: 'none' }} onChange={e => handleFile(e.target.files[0])} />
-            {parseError && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, marginTop: 12, fontSize: 13 }}>
-                <AlertTriangle size={15} /> {parseError}
-              </div>
-            )}
+      {step === 'preview' && parsed && (
+        <div className="stack">
+          <label className="field">
+            <span className="field-label">Nombre del reporte</span>
+            <input className="input" value={weekLabel} onChange={e => setWeekLabel(e.target.value)} placeholder="Semana 22 · 25–30 may 2026" data-autofocus />
+          </label>
+
+          <div className="grid-auto" style={{ gridTemplateColumns: '1fr 1fr' }}>
+            <SummaryCard label="Ralentís (+30 min)" count={parsed.observations.length} />
+            <SummaryCard label="Caídas de voltaje" count={parsed.voltage_drops.length} />
+            <SummaryCard label="Sin salida de yarda" count={parsed.non_deployed.length} />
+            <SummaryCard label="Salidas tardías" count={parsed.late_departures.length} />
           </div>
-        )}
 
-        {/* Step: preview */}
-        {step === 'preview' && parsed && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Label input */}
-            <div>
-              <label style={labelStyle}>Nombre del reporte
-              <input
-                value={weekLabel}
-                onChange={e => setWeekLabel(e.target.value)}
-                style={inputStyle}
-                placeholder="Ej: Semana #22 – May 25-30 2026"
-              />
-              </label>
-            </div>
+          <dl className="definition-list">
+            <dt>Archivo</dt><dd>{file.name}</dd>
+            <dt>Período</dt><dd>{parsed.date_from} → {parsed.date_to}</dd>
+            <dt>Días</dt><dd>{[...new Set([...parsed.voltage_drops, ...parsed.non_deployed].map(r => r.day))].join(', ') || '—'}</dd>
+          </dl>
 
-            {/* Summary cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <SummaryCard label="Ralentís (+30 min)" count={parsed.observations.length} color="#7c3aed" />
-              <SummaryCard label="Caídas de voltaje" count={parsed.voltage_drops.length} color="#b91c1c" />
-              <SummaryCard label="Sin salida de yarda" count={parsed.non_deployed.length} color="#b45309" />
-              <SummaryCard label="Salidas tardías" count={parsed.late_departures.length} color="#2563eb" />
-            </div>
+          {parseError && <div role="alert" className="notice notice-error"><AlertTriangle size={15} /> {parseError}</div>}
+        </div>
+      )}
 
-            {/* Days detected */}
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px' }}>
-              <p style={{ fontSize: 12, color: '#64748b' }}>
-                <strong>Archivo:</strong> {file.name}
-              </p>
-              <p style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-                <strong>Período:</strong> {parsed.date_from} → {parsed.date_to}
-              </p>
-              <p style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
-                <strong>Días importados:</strong> {[...new Set([...parsed.voltage_drops, ...parsed.non_deployed].map(r => r.day))].join(', ') || '—'}
-              </p>
-            </div>
-
-            {parseError && (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
-                <AlertTriangle size={15} /> {parseError}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button onClick={() => { setStep('pick'); setParsed(null); }} style={btnSecondary}>
-                Cambiar archivo
-              </button>
-              <button onClick={handleSave} disabled={!weekLabel.trim()} style={btnPrimary}>
-                <Check size={15} /> Guardar reporte
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step: saving */}
-        {step === 'saving' && (
-          <div style={{ textAlign: 'center', padding: '30px 0' }}>
-            <Loader2 size={36} color="#2563eb" className="spin" style={{ marginBottom: 12 }} />
-            <p style={{ color: '#64748b' }}>Guardando reporte...</p>
-          </div>
-        )}
+      {step === 'saving' && (
+        <div role="status" style={{ textAlign: 'center', padding: '30px 0' }}>
+          <Loader2 size={28} color="var(--accent)" className="spin" style={{ marginBottom: 10 }} />
+          <p className="muted">Guardando reporte…</p>
+        </div>
+      )}
     </Modal>
   );
 }
 
-function SummaryCard({ label, count, color }) {
+function SummaryCard({ label, count }) {
   return (
-    <div style={{ background: 'white', border: `1px solid ${color}30`, borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-      <p style={{ fontSize: 26, fontWeight: 800, color }}>{count}</p>
-      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{label}</p>
+    <div className="card stat" style={{ padding: '10px 12px' }}>
+      <p className="stat-label">{label}</p>
+      <p className="stat-value" style={{ fontSize: 20 }}>{count}</p>
     </div>
   );
 }
-
-const modal = { maxWidth: 500, padding: 28 };
-const closeBtn = {
-  background: 'none', border: 'none', cursor: 'pointer', color: '#64748b',
-  display: 'flex', padding: 4, borderRadius: 6,
-};
-const dropZone = {
-  width: '100%',
-  border: '2px dashed #e2e8f0', borderRadius: 12, padding: '36px 20px',
-  textAlign: 'center', cursor: 'pointer', background: '#f8fafc',
-  transition: 'border-color 0.15s',
-};
-const labelStyle = { fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 };
-const inputStyle = {
-  marginTop: 6,
-  width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8,
-  fontSize: 14, color: '#1e293b', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-};
-const btnPrimary = {
-  display: 'flex', alignItems: 'center', gap: 6,
-  padding: '9px 18px', background: '#2563eb', color: 'white',
-  border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600,
-  cursor: 'pointer', fontFamily: 'inherit',
-};
-const btnSecondary = {
-  padding: '9px 18px', background: 'transparent', color: '#374151',
-  border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13,
-  cursor: 'pointer', fontFamily: 'inherit',
-};

@@ -19,13 +19,15 @@ export const MAP_TYPES = [
   {
     id: 'osm',
     label: 'Estándar',
-    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    // Servidor único recomendado por OpenStreetMap; los subdominios a/b/c están en desuso
+    url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     attr: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    subdomains: ['a', 'b', 'c'],
+    // Sin {s} en la URL no se usa, pero Leaflet falla si recibe `undefined`
+    subdomains: ['a'],
   },
 ];
 
-export default function MapTypePicker({ value, onChange, accent = '#2563eb', tint = '#eff6ff' }) {
+export default function MapTypePicker({ value, onChange }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const toggleRef = useRef(null);
@@ -57,31 +59,23 @@ export default function MapTypePicker({ value, onChange, accent = '#2563eb', tin
         aria-label="Tipo de mapa"
         aria-expanded={open}
         title="Tipo de mapa"
-        style={{ ...toggle, background: open ? accent : 'white' }}
+        className="map-toggle"
       >
-        <Layers size={18} color={open ? 'white' : '#374151'} />
+        <Layers size={18} />
       </button>
 
       {open && (
-        <div role="group" aria-label="Tipo de mapa" style={menu}>
-          {MAP_TYPES.map((t, i) => {
+        <div role="group" aria-label="Tipo de mapa" className="map-control map-menu">
+          {MAP_TYPES.map((t) => {
             const selected = value === t.id;
             return (
               <button
                 key={t.id}
                 onClick={() => { onChange(t.id); setOpen(false); toggleRef.current?.focus(); }}
                 aria-pressed={selected}
-                style={{
-                  ...option,
-                  background: selected ? tint : 'white',
-                  color: selected ? accent : '#374151',
-                  borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
-                  fontWeight: selected ? 700 : 400,
-                }}
+                className="map-option"
               >
-                <span style={{ width: 14, display: 'flex', alignItems: 'center' }}>
-                  {selected && <Check size={13} />}
-                </span>
+                <span style={{ width: 14, display: 'flex' }}>{selected && <Check size={14} />}</span>
                 {t.label}
               </button>
             );
@@ -91,17 +85,3 @@ export default function MapTypePicker({ value, onChange, accent = '#2563eb', tin
     </div>
   );
 }
-
-const toggle = {
-  border: 'none', borderRadius: 8, padding: '7px 9px', cursor: 'pointer',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-};
-const menu = {
-  position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'white',
-  borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.18)', overflow: 'hidden', minWidth: 130,
-};
-const option = {
-  display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', width: '100%',
-  border: 'none', cursor: 'pointer', fontSize: 13, textAlign: 'left', whiteSpace: 'nowrap',
-};

@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
-import { AlertOctagon, Upload, X, Check, AlertTriangle, Loader2 } from 'lucide-react';
+import { Check, AlertTriangle, Loader2 } from 'lucide-react';
+import DropZone from './ui/DropZone';
 import { useCreateReport } from '../api/queries';
 import Modal from './ui/Modal';
 
@@ -171,97 +172,80 @@ export default function InfractionImportModal({ onClose }) {
   const uniqueVehicles = parsed ? new Set(parsed.infractions.map(i => i.plate)).size : 0;
 
   return (
-    <Modal label="Importar infracciones" onClose={onClose} style={modal}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <AlertOctagon size={22} color="#b91c1c" />
-            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1e293b' }}>Importar Infracciones</h2>
-          </div>
-          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
+    <Modal
+      title="Importar infracciones"
+      description="Desde el archivo de infracciones del sistema GPS."
+      onClose={step === 'saving' ? () => {} : onClose}
+      footer={step === 'preview' && parsed ? (
+        <>
+          <button onClick={() => { setStep('pick'); setParsed(null); }} className="btn btn-secondary">
+            Cambiar archivo
+          </button>
+          <button onClick={handleSave} disabled={!label.trim()} className="btn btn-primary">
+            <Check size={15} /> Guardar reporte
+          </button>
+        </>
+      ) : null}
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".xlsx,.xlsm,.xls"
+        className="sr-only"
+        tabIndex={-1}
+        aria-label="Archivo Excel"
+        onChange={e => handleFile(e.target.files[0])}
+      />
+
+      {step === 'pick' && (
+        <div className="stack" style={{ gap: 12 }}>
+          <DropZone
+            hint="Formatos: .xlsx, .xlsm"
+            busy={parsing}
+            onPick={() => inputRef.current.click()}
+            onDropFiles={(files) => handleFile(files[0])}
+          />
+          {error && <div role="alert" className="notice notice-error"><AlertTriangle size={15} /> {error}</div>}
         </div>
+      )}
 
-        {step === 'pick' && (
-          <div>
-            <button
-              type="button"
-              onClick={() => inputRef.current.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files[0]); }}
-              style={dropZone}
-            >
-              {parsing
-                ? <Loader2 size={36} color="#b91c1c" className="spin" />
-                : <Upload size={36} color="#64748b" />}
-              <span style={{ display: 'block', fontWeight: 600, color: '#374151', marginTop: 8 }}>
-                {parsing ? 'Procesando archivo...' : 'Arrastra el archivo aquí o haz click'}
-              </span>
-              <span style={{ display: 'block', fontSize: 12, color: '#475569', marginTop: 4 }}>Formatos: .xlsx, .xlsm</span>
-            </button>
-            <input ref={inputRef} type="file" accept=".xlsx,.xlsm,.xls" style={{ display: 'none' }}
-              onChange={e => handleFile(e.target.files[0])} />
-            {error && <div style={errorBox}><AlertTriangle size={14} /> {error}</div>}
+      {step === 'preview' && parsed && (
+        <div className="stack">
+          <label className="field">
+            <span className="field-label">Nombre del reporte</span>
+            <input className="input" value={label} onChange={e => setLabel(e.target.value)} placeholder="Infracciones may 2026" data-autofocus />
+          </label>
+
+          <div className="grid-auto" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+            <SCard label="Infracciones" count={parsed.infractions.length} />
+            <SCard label="Tipos" count={uniqueTypes} />
+            <SCard label="Unidades" count={uniqueVehicles} />
           </div>
-        )}
 
-        {step === 'preview' && parsed && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label style={labelStyle}>Nombre del reporte
-              <input value={label} onChange={e => setLabel(e.target.value)} style={inputStyle}
-                placeholder="Ej: Infracciones May 2026" />
-              </label>
-            </div>
+          <dl className="definition-list">
+            <dt>Archivo</dt><dd>{file.name}</dd>
+            <dt>Período</dt><dd>{parsed.date_from} → {parsed.date_to}</dd>
+          </dl>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              <SCard label="Infracciones" count={parsed.infractions.length} color="#b91c1c" />
-              <SCard label="Tipos únicos" count={uniqueTypes} color="#b45309" />
-              <SCard label="Unidades" count={uniqueVehicles} color="#7c3aed" />
-            </div>
+          {error && <div role="alert" className="notice notice-error"><AlertTriangle size={15} /> {error}</div>}
+        </div>
+      )}
 
-            <div style={{ background: '#f8fafc', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#64748b' }}>
-              <p><strong>Archivo:</strong> {file.name}</p>
-              <p style={{ marginTop: 3 }}><strong>Período:</strong> {parsed.date_from} → {parsed.date_to}</p>
-            </div>
-
-            {error && <div style={errorBox}><AlertTriangle size={14} /> {error}</div>}
-
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 4 }}>
-              <button onClick={() => { setStep('pick'); setParsed(null); }} style={btnSecondary}>
-                Cambiar archivo
-              </button>
-              <button onClick={handleSave} disabled={!label.trim()} style={btnPrimary}>
-                <Check size={15} /> Guardar reporte
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'saving' && (
-          <div style={{ textAlign: 'center', padding: '30px 0' }}>
-            <Loader2 size={36} color="#b91c1c" className="spin" style={{ marginBottom: 12 }} />
-            <p style={{ color: '#64748b' }}>Guardando infracciones...</p>
-          </div>
-        )}
+      {step === 'saving' && (
+        <div role="status" style={{ textAlign: 'center', padding: '30px 0' }}>
+          <Loader2 size={28} color="var(--accent)" className="spin" style={{ marginBottom: 10 }} />
+          <p className="muted">Guardando infracciones…</p>
+        </div>
+      )}
     </Modal>
   );
 }
 
-function SCard({ label, count, color }) {
+function SCard({ label, count }) {
   return (
-    <div style={{ background: 'white', border: `1px solid ${color}25`, borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-      <p style={{ fontSize: 24, fontWeight: 800, color }}>{count}</p>
-      <p style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{label}</p>
+    <div className="card stat" style={{ padding: '10px 12px' }}>
+      <p className="stat-label">{label}</p>
+      <p className="stat-value" style={{ fontSize: 20 }}>{count}</p>
     </div>
   );
 }
-
-const modal = { maxWidth: 500, padding: 28 };
-const closeBtn = { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', padding: 4, borderRadius: 6 };
-const dropZone = {
-  width: '100%', border: '2px dashed #e2e8f0', borderRadius: 12, padding: '36px 20px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc' };
-const labelStyle = { fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 };
-const inputStyle = {
-  marginTop: 6, width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 14, color: '#1e293b', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' };
-const btnPrimary = { display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#b91c1c', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' };
-const btnSecondary = { padding: '9px 18px', background: 'transparent', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' };
-const errorBox = { display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', padding: '10px 14px', borderRadius: 8, fontSize: 13 };

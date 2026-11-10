@@ -1,7 +1,6 @@
 import { Navigate, useParams } from 'react-router-dom';
 import { Search, Timer } from 'lucide-react';
 import { useShareData } from '../api/queries';
-import { formatDateTime } from '../lib/format';
 import WeeklyReportView from '../components/report/WeeklyReportView';
 import { ReportSkeleton } from '../components/ui/Skeleton';
 import { ErrorState, FullPageMessage } from '../components/ui/States';
@@ -22,37 +21,27 @@ export default function SharedReport() {
     }
     return (
       <FullPageMessage>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Reporte compartido</h1>
-        <ErrorState title="Error al cargar el reporte" message={error.message} onRetry={refetch} style={{ maxWidth: 420 }} />
+        <h1 className="page-title">Reporte compartido</h1>
+        <ErrorState title="Error al cargar el reporte" message={error.message} onRetry={refetch} />
       </FullPageMessage>
     );
   }
 
-  if (data.type !== 'report') return <Navigate to={`/map/${token}`} replace />;
+  if (data.type !== 'report') return <Navigate to={`/${data.type === 'tracks' ? 'recorrido' : 'map'}/${token}`} replace />;
 
-  if (data.report.type === 'infractions') return <InfractionDetail report={data.report} shared />;
+  if (data.report.type === 'infractions') {
+    return <InfractionDetail report={data.report} expiresAt={data.expires_at} shared />;
+  }
 
-  return (
-    <WeeklyReportView
-      report={data.report}
-      actions={(
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 3 }}>
-            Válido hasta
-          </p>
-          <p style={{ fontSize: 12, color: 'white', fontWeight: 500 }}>{formatDateTime(data.expires_at)}</p>
-        </div>
-      )}
-    />
-  );
+  return <WeeklyReportView report={data.report} expiresAt={data.expires_at} />;
 }
 
 function LinkMessage({ Icon, title, desc }) {
   return (
     <FullPageMessage>
-      <Icon size={48} color="#64748b" />
-      <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a' }}>{title}</h1>
-      <p style={{ color: '#475569', fontSize: 14 }}>{desc}</p>
+      <Icon size={36} color="var(--ink-3)" />
+      <h1 className="page-title">{title}</h1>
+      <p className="muted">{desc}</p>
     </FullPageMessage>
   );
 }

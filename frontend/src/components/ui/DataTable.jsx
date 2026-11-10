@@ -10,30 +10,24 @@ const cellLayout = (col) =>
 
 // Tabla virtualizada: solo existen en el DOM las filas visibles. En pantallas
 // angostas se desplaza en horizontal en lugar de comprimir las columnas.
-export default function DataTable({ data, columns, label, maxHeight = 'calc(100dvh - 260px)' }) {
+export default function DataTable({ data, columns, label, maxHeight = 'calc(100dvh - 300px)' }) {
   const scrollRef = useRef(null);
   const virtualizer = useVirtualizer({
     count: data.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 41,
+    estimateSize: () => 39,
     overscan: 10,
   });
-  const minWidth = columns.reduce((sum, col) => sum + (col.width || FLEX_MIN_WIDTH), 40);
+  const minWidth = columns.reduce((sum, col) => sum + (col.width || FLEX_MIN_WIDTH), 32);
 
   return (
-    <div style={frame}>
-      <div
-        ref={scrollRef}
-        role="region"
-        aria-label={label}
-        tabIndex={0}
-        style={{ overflow: 'auto', maxHeight }}
-      >
+    <div className="table-frame">
+      <div ref={scrollRef} role="region" aria-label={label} tabIndex={0} style={{ overflow: 'auto', maxHeight }}>
         <div role="table" aria-label={label} aria-rowcount={data.length + 1} style={{ minWidth }}>
-          <div role="rowgroup" style={headerGroup}>
-            <div role="row" aria-rowindex={1} style={{ display: 'flex', padding: '11px 20px' }}>
+          <div role="rowgroup" className="table-head">
+            <div role="row" aria-rowindex={1} style={{ display: 'flex', padding: '9px 16px' }}>
               {columns.map((col) => (
-                <div key={col.key} role="columnheader" style={{ ...headerCell, ...cellLayout(col) }}>
+                <div key={col.key} role="columnheader" className="table-th" style={cellLayout(col)}>
                   {col.label}
                 </div>
               ))}
@@ -49,12 +43,11 @@ export default function DataTable({ data, columns, label, maxHeight = 'calc(100d
                   data-index={item.index}
                   role="row"
                   aria-rowindex={item.index + 2}
+                  className="table-row"
                   style={{
                     position: 'absolute', top: 0, left: 0, width: '100%',
                     transform: `translateY(${item.start}px)`,
-                    display: 'flex', alignItems: 'center', padding: '11px 20px',
-                    borderBottom: '1px solid #f1f5f9',
-                    background: item.index % 2 === 0 ? 'white' : '#fafbfc',
+                    display: 'flex', alignItems: 'center', padding: '9px 16px',
                   }}
                 >
                   {columns.map((col) => {
@@ -65,7 +58,8 @@ export default function DataTable({ data, columns, label, maxHeight = 'calc(100d
                         key={col.key}
                         role="cell"
                         title={typeof content === 'string' ? content : undefined}
-                        style={{ ...bodyCell, ...cellLayout(col), whiteSpace: col.flex ? 'nowrap' : 'normal' }}
+                        className="table-td"
+                        style={{ ...cellLayout(col), whiteSpace: col.flex ? 'nowrap' : 'normal' }}
                       >
                         {content}
                       </div>
@@ -80,20 +74,3 @@ export default function DataTable({ data, columns, label, maxHeight = 'calc(100d
     </div>
   );
 }
-
-const frame = {
-  background: 'white', borderRadius: 14, overflow: 'hidden',
-  boxShadow: '0 1px 3px rgba(15,23,42,0.06), 0 4px 16px rgba(15,23,42,0.04)',
-  border: '1px solid rgba(15,23,42,0.05)',
-};
-const headerGroup = {
-  position: 'sticky', top: 0, zIndex: 1,
-  background: '#f8fafc', borderBottom: '1px solid #e2e8f0',
-};
-const headerCell = {
-  fontSize: 10, fontWeight: 700, color: '#475569',
-  textTransform: 'uppercase', letterSpacing: '0.09em', paddingRight: 8,
-};
-const bodyCell = {
-  fontSize: 12, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', paddingRight: 8,
-};

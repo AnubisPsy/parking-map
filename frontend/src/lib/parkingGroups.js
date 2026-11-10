@@ -1,4 +1,4 @@
-import { NEUTRAL, PALETTE } from './colors';
+import { NEUTRAL } from './colors';
 
 export const GROUP_OPTIONS = [
   { id: 'unit', label: 'Unidad' },
@@ -42,10 +42,12 @@ function buildFlatGroups(parkings, groupBy, unitColors) {
       label = unitLabel(p);
       color = unitColors[p.unit_id] || NEUTRAL;
     } else if (groupBy === 'date') {
+      color = NEUTRAL;
       const day = dateKey(p);
       key = day || 'sin-fecha';
       label = day ? dayLabel(day) : 'Sin fecha';
     } else {
+      color = NEUTRAL;
       key = p.address || 'sin-sucursal';
       label = p.address || 'Sin sucursal';
     }
@@ -56,9 +58,6 @@ function buildFlatGroups(parkings, groupBy, unitColors) {
   });
 
   const groups = [...map.values()];
-  if (groupBy !== 'unit') {
-    groups.forEach((g, i) => { g.color = PALETTE[i % PALETTE.length]; });
-  }
   if (groupBy === 'date') groups.sort((a, b) => b.key.localeCompare(a.key));
   else groups.sort((a, b) => a.label.localeCompare(b.label));
   groups.forEach((g) => g.items.sort(byStartTime));
@@ -93,9 +92,9 @@ function buildDateUnitGroups(parkings, unitColors) {
   });
 
   return [...dates.values()]
-    .map((g, i) => ({
+    .map((g) => ({
       ...g,
-      color: PALETTE[i % PALETTE.length],
+      color: NEUTRAL,
       subgroups: [...g.subgroups.values()]
         .sort((a, b) => a.label.localeCompare(b.label))
         .map((sg) => ({ ...sg, items: [...sg.items].sort(byStartTime) })),

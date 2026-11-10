@@ -1,6 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { Navigate, useParams, useSearchParams } from 'react-router-dom';
-import { Clock, Map as MapIcon, MapPin, Search } from 'lucide-react';
+import { Clock, MapPin, Search } from 'lucide-react';
 import { useShareData } from '../api/queries';
 import { buildUnitColors } from '../lib/colors';
 import { formatDateTime, plural } from '../lib/format';
@@ -9,7 +9,8 @@ import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
 import GroupedParkingList from '../components/parking/GroupedParkingList';
 import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarControls';
-import { ListSkeleton, MapSkeleton, Skeleton } from '../components/ui/Skeleton';
+import { SharedHeader } from '../components/ui/AppHeader';
+import { ListSkeleton, MapSkeleton } from '../components/ui/Skeleton';
 import { EmptyState, ErrorState, FullPageMessage } from '../components/ui/States';
 
 // El mapa es el contenido principal: se descarga a la vez que los datos, no después
@@ -31,13 +32,14 @@ export default function SharedMap() {
     }
     return (
       <FullPageMessage>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Mapa compartido</h1>
-        <ErrorState title="Error al cargar el mapa" message={error.message} onRetry={refetch} style={{ maxWidth: 420 }} />
+        <h1 className="page-title">Mapa compartido</h1>
+        <ErrorState title="Error al cargar el mapa" message={error.message} onRetry={refetch} />
       </FullPageMessage>
     );
   }
 
   if (data.type === 'report') return <Navigate to={`/report/${token}`} replace />;
+  if (data.type === 'tracks') return <Navigate to={`/recorrido/${token}`} replace />;
   return <SharedMapView data={data} />;
 }
 
@@ -63,42 +65,39 @@ function SharedMapView({ data }) {
 
   return (
     <div className="page">
-      <header className="app-header app-header-blue">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <MapIcon size={24} color="white" />
-          <div>
-            <h1 style={{ fontSize: 17, fontWeight: 800, color: 'white' }}>Mapa Compartido</h1>
-            <p style={{ fontSize: 12, color: '#eff6ff' }}>
-              {parkings.length} {plural(parkings.length, 'registro')} · Expira: {formatDateTime(data.expires_at)}
-            </p>
-          </div>
-        </div>
-        <p style={{ fontSize: 12, color: 'white', background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: 8 }}>
-          Vista de solo lectura
-        </p>
-      </header>
+      <SharedHeader>
+        <p className="header-note">Solo lectura · Expira {formatDateTime(data.expires_at)}</p>
+      </SharedHeader>
 
       <div className="split">
-        <aside className="sidebar" style={{ width: 320 }} aria-label="Filtros y registros">
-          <GroupPicker groupBy={filters.groupBy} onChange={filters.changeGroupBy} />
+        <aside className="sidebar" aria-label="Filtros y registros">
+          <div className="sidebar-head">
+            <div>
+              <h1 className="sidebar-title">Mapa compartido</h1>
+              <p className="small muted">{parkings.length} {plural(parkings.length, 'registro')}</p>
+            </div>
+            {parkings.length > 0 && (
+              <>
+                <GroupPicker groupBy={filters.groupBy} onChange={filters.changeGroupBy} />
+                <DateRangeFilter
+                  from={filters.dateFrom}
+                  to={filters.dateTo}
+                  onFromChange={filters.setDateFrom}
+                  onToChange={filters.setDateTo}
+                  resultCount={visibleParkings.length}
+                />
+              </>
+            )}
+          </div>
           {parkings.length === 0 ? (
             <EmptyState icon={MapPin} title="Sin registros" description="Este enlace no incluye estacionamientos." />
           ) : (
-            <>
-              <DateRangeFilter
-                from={filters.dateFrom}
-                to={filters.dateTo}
-                onFromChange={filters.setDateFrom}
-                onToChange={filters.setDateTo}
-                resultCount={visibleParkings.length}
-              />
-              <GroupedParkingList
-                filters={filters}
-                unitColors={unitColors}
-                totalCount={parkings.length}
-                visibleCount={visibleParkings.length}
-              />
-            </>
+            <GroupedParkingList
+              filters={filters}
+              unitColors={unitColors}
+              totalCount={parkings.length}
+              visibleCount={visibleParkings.length}
+            />
           )}
         </aside>
 
@@ -121,11 +120,9 @@ function SharedMapView({ data }) {
 function SharedMapSkeleton() {
   return (
     <div className="page">
-      <div className="app-header app-header-blue" style={{ height: 60 }}>
-        <Skeleton width={180} height={20} style={{ opacity: 0.4 }} />
-      </div>
+      <div className="app-header" />
       <div className="split">
-        <div className="sidebar" style={{ width: 320, padding: 12 }}><ListSkeleton /></div>
+        <div className="sidebar" style={{ padding: 12 }}><ListSkeleton /></div>
         <div className="map-area"><MapSkeleton /></div>
       </div>
     </div>
@@ -135,9 +132,9 @@ function SharedMapSkeleton() {
 function LinkMessage({ Icon, title, desc }) {
   return (
     <FullPageMessage>
-      <Icon size={56} color="#64748b" />
-      <h1 style={{ fontSize: 22, fontWeight: 700 }}>{title}</h1>
-      <p style={{ color: '#475569', fontSize: 15 }}>{desc}</p>
+      <Icon size={36} color="var(--ink-3)" />
+      <h1 className="page-title">{title}</h1>
+      <p className="muted">{desc}</p>
     </FullPageMessage>
   );
 }

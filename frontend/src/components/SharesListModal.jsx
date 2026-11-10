@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useDeleteShares, useShares } from '../api/queries';
-import { X, Copy, ExternalLink, Trash2, Link2, Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Copy, Check, ExternalLink, Trash2, Link2, Clock, CheckCircle2, MinusCircle } from 'lucide-react';
 import { copyToClipboard } from '../lib/clipboard';
 import { formatDateTime, plural } from '../lib/format';
 import { useConfirm } from './ConfirmModal';
@@ -35,14 +35,19 @@ function getProgress(createdAt, expiresAt, now) {
   return Math.min(100, Math.max(0, (elapsed / total) * 100));
 }
 
-// Los enlaces de reporte y de mapa viven en rutas distintas
+// Cada tipo de enlace vive en su propia ruta
+const ROUTES = { report: 'report', tracks: 'recorrido' };
 function shareUrl(share) {
-  const route = share.type === 'report' ? 'report' : 'map';
+  const route = ROUTES[share.type] || 'map';
   return `${window.location.origin}/${route}/${share.token}`;
 }
 
 function shareScope(share) {
   if (share.type === 'report') return 'Reporte';
+  if (share.type === 'tracks') {
+    const count = share.track_count ?? 0;
+    return `${count} ${plural(count, 'recorrido')} · ${(share.unit_ids || []).join(', ')}`;
+  }
   return share.unit_ids ? share.unit_ids.join(', ') : 'Todas las unidades';
 }
 
@@ -80,182 +85,90 @@ export default function SharesListModal({ onClose }) {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  return (
-    <Modal label="Mis enlaces compartidos" onClose={onClose} style={modal}>
-      <div style={header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Link2 size={18} />
-          <h2 style={{ fontSize: 16, fontWeight: 700 }}>Mis enlaces compartidos</h2>
-          {active.length > 0 && (
-            <span style={activeBadge}>{active.length} {plural(active.length, 'activo')}</span>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {expired.length > 0 && (
-            <button onClick={handleDeleteExpired} style={{ ...btnGhost, fontSize: 12, color: 'white' }}>
-              <Trash2 size={13} /> Limpiar expirados
-            </button>
-          )}
-          <button onClick={onClose} style={closeBtn} aria-label="Cerrar"><X size={18} /></button>
-        </div>
-      </div>
-
-      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10, flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        {isPending && <ListSkeleton rows={3} rowHeight={140} label="Cargando enlaces" />}
-
-        {error && <ErrorState message={error.message} onRetry={refetch} />}
-
-        {!isPending && !error && shares.length === 0 && (
-          <EmptyState
-            icon={Link2}
-            title="Sin enlaces creados"
-            description={'Genera un enlace con el botón "Compartir mapa"'}
-          />
-        )}
-
-        {shares.map(share => {
-          const isActive = new Date(share.expires_at) > now;
-          const timeLeft = getTimeLeft(share.expires_at, now);
-          const progress = getProgress(share.created_at, share.expires_at, now);
-          const barColor = progress < 50 ? '#15803d' : progress < 80 ? '#b45309' : '#b91c1c';
-          const url = shareUrl(share);
-
-          return (
-            <article key={share.id} style={{ ...card, background: isActive ? 'white' : '#f8fafc' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  {isActive
-                    ? <CheckCircle2 size={15} color="#15803d" />
-                    : <AlertCircle size={15} color="#64748b" />}
-                  <span style={{ fontSize: 13, fontWeight: 700, color: isActive ? '#15803d' : '#475569' }}>
-                    {isActive ? 'Activo' : 'Expirado'}
-                  </span>
-                  <span style={unitsPill}>{shareScope(share)}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                  {isActive && (
-                    <>
-                      <IconBtn onClick={() => copyLink(share)} title="Copiar enlace" active={copiedId === share.id}>
-                        <Copy size={13} />
-                      </IconBtn>
-                      <IconBtn onClick={() => window.open(url, '_blank')} title="Abrir enlace">
-                        <ExternalLink size={13} />
-                      </IconBtn>
-                    </>
-                  )}
-                  <IconBtn onClick={() => handleDelete(share.id)} title="Revocar enlace" danger>
-                    <Trash2 size={13} />
-                  </IconBtn>
-                </div>
-              </div>
-
-              <div
-                role="progressbar"
-                aria-label="Vigencia consumida"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(isActive ? progress : 100)}
-                style={{ height: 5, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginBottom: 10 }}
-              >
-                <div style={{
-                  height: '100%',
-                  width: `${isActive ? progress : 100}%`,
-                  background: isActive ? barColor : '#94a3b8',
-                  borderRadius: 4,
-                  transition: 'width 0.5s',
-                }} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: 12 }}>
-                <InfoRow label="Creado" value={formatDateTime(share.created_at)} />
-                <InfoRow label="Vence" value={formatDateTime(share.expires_at)} />
-                {isActive && timeLeft && (
-                  <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
-                    <Clock size={12} color={barColor} />
-                    <span style={{ fontWeight: 700, color: barColor, fontSize: 12 }}>
-                      Tiempo restante: {timeLeft}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginTop: 8, background: '#f1f5f9', borderRadius: 6, padding: '5px 10px', fontSize: 11, color: '#334155', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {url}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
-      {shares.length > 0 && (
-        <div style={{ padding: '12px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: '#475569', flexShrink: 0 }}>
-          <span>{shares.length} {plural(shares.length, 'enlace')} en total · {active.length} {plural(active.length, 'activo')}</span>
-          <button onClick={onClose} style={{ ...btnGhost, color: '#374151', fontWeight: 600 }}>Cerrar</button>
-        </div>
+  const footer = shares.length > 0 ? (
+    <>
+      <span className="small muted" style={{ alignSelf: 'center' }}>
+        {active.length} {plural(active.length, 'activo')} de {shares.length}
+      </span>
+      {expired.length > 0 && (
+        <button onClick={handleDeleteExpired} className="btn btn-ghost">
+          <Trash2 size={14} /> Limpiar expirados
+        </button>
       )}
+    </>
+  ) : null;
+
+  return (
+    <>
+      <Modal title="Mis enlaces" description="Enlaces compartidos y su vigencia." size="lg" onClose={onClose} footer={footer} footerBetween>
+        <div className="stack" style={{ gap: 8 }}>
+          {isPending && <ListSkeleton rows={3} rowHeight={120} label="Cargando enlaces" />}
+
+          {error && <ErrorState message={error.message} onRetry={refetch} />}
+
+          {!isPending && !error && shares.length === 0 && (
+            <EmptyState icon={Link2} title="Sin enlaces" description="Los enlaces que compartas aparecerán aquí." />
+          )}
+
+          {shares.map(share => {
+            const isActive = new Date(share.expires_at) > now;
+            const timeLeft = getTimeLeft(share.expires_at, now);
+            const progress = getProgress(share.created_at, share.expires_at, now);
+            const url = shareUrl(share);
+            const copied = copiedId === share.id;
+
+            return (
+              <article key={share.id} className="card share-card">
+                <div className="row-between" style={{ marginBottom: 8 }}>
+                  <div className="row" style={{ flexWrap: 'wrap', minWidth: 0 }}>
+                    <span className={`status ${isActive ? 'status-active' : 'status-expired'}`}>
+                      {isActive ? <CheckCircle2 size={14} /> : <MinusCircle size={14} />}
+                      {isActive ? 'Activo' : 'Expirado'}
+                    </span>
+                    <span className="small muted truncate">{shareScope(share)}</span>
+                  </div>
+                  <div className="row" style={{ gap: 2 }}>
+                    {isActive && (
+                      <>
+                        <button onClick={() => copyLink(share)} className="icon-btn" title="Copiar enlace" aria-label="Copiar enlace">
+                          {copied ? <Check size={15} /> : <Copy size={15} />}
+                        </button>
+                        <button onClick={() => window.open(url, '_blank')} className="icon-btn" title="Abrir enlace" aria-label="Abrir enlace">
+                          <ExternalLink size={15} />
+                        </button>
+                      </>
+                    )}
+                    <button onClick={() => handleDelete(share.id)} className="icon-btn icon-btn-danger" title="Revocar enlace" aria-label="Revocar enlace">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  className="progress"
+                  role="progressbar"
+                  aria-label="Vigencia consumida"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(isActive ? progress : 100)}
+                >
+                  <div style={{ width: `${isActive ? progress : 100}%`, background: isActive ? 'var(--accent)' : 'var(--border-strong)' }} />
+                </div>
+
+                <div className="row-between small muted" style={{ flexWrap: 'wrap', margin: '8px 0' }}>
+                  <span>Creado {formatDateTime(share.created_at)}</span>
+                  {isActive && timeLeft
+                    ? <span className="row" style={{ gap: 4 }}><Clock size={12} /> Quedan {timeLeft}</span>
+                    : <span>Venció {formatDateTime(share.expires_at)}</span>}
+                </div>
+
+                <p className="url-box truncate">{url}</p>
+              </article>
+            );
+          })}
+        </div>
+      </Modal>
       {dialog}
-    </Modal>
+    </>
   );
 }
-
-function InfoRow({ label, value }) {
-  return (
-    <div>
-      <span style={{ color: '#475569', display: 'block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
-      <span style={{ color: '#374151', fontWeight: 500 }}>{value}</span>
-    </div>
-  );
-}
-
-function IconBtn({ children, onClick, title, active, danger }) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-label={title}
-      style={{
-        background: active ? '#dcfce7' : 'transparent',
-        border: '1px solid',
-        borderColor: active ? '#86efac' : danger ? '#fecaca' : '#64748b',
-        borderRadius: 6,
-        padding: '4px 7px',
-        cursor: 'pointer',
-        color: active ? '#15803d' : danger ? '#b91c1c' : '#475569',
-        display: 'flex',
-        alignItems: 'center',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-const modal = {
-  borderRadius: 16, maxWidth: 600, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-};
-const header = {
-  padding: '16px 20px',
-  background: 'linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%)',
-  color: 'white', display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between',
-  alignItems: 'center', flexShrink: 0,
-};
-const closeBtn = {
-  background: 'none', border: 'none', color: 'white',
-  cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', borderRadius: 4,
-};
-const card = {
-  border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px',
-  boxShadow: '0 1px 4px rgba(0,0,0,0.05)', flexShrink: 0,
-};
-const unitsPill = {
-  background: '#f1f5f9', color: '#334155', fontSize: 11, fontWeight: 600,
-  padding: '2px 8px', borderRadius: 20,
-};
-const activeBadge = {
-  background: 'rgba(255,255,255,0.2)', fontSize: 12, fontWeight: 600,
-  padding: '2px 8px', borderRadius: 20,
-};
-const btnGhost = {
-  background: 'none', border: 'none', cursor: 'pointer',
-  display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 6,
-};

@@ -13,6 +13,7 @@ function toSummary(share) {
     token: share.token,
     type: share.type,
     unit_ids: share.unit_ids,
+    ...(share.type === 'tracks' && { track_count: share.tracks_snapshot.length }),
     expires_at: share.expires_at,
     created_at: share.created_at,
   };
@@ -34,7 +35,7 @@ router.delete('/:id', (req, res) => {
 });
 
 router.post('/', validate(shareBody), (req, res) => {
-  const { unit_ids, expires_in_minutes, report_id } = req.valid;
+  const { unit_ids, expires_in_minutes, report_id, track_ids } = req.valid;
 
   const token = randomBytes(20).toString('hex');
   const expiresAt = new Date(Date.now() + expires_in_minutes * 60 * 1000).toISOString();
@@ -51,6 +52,25 @@ router.post('/', validate(shareBody), (req, res) => {
       report_snapshot: report,
       expires_at: expiresAt,
       created_at: new Date().toISOString(),
+    };
+    db.saveShares([...db.getShares(), share]);
+    return res.status(201).json(toSummary(share));
+  }
+
+  // Reporte de recorridos: copia de los recorridos elegidos y de sus paradas
+  if (track_ids) {
+    const tracks = db.getTracks().filter((t) => track_ids.includes(t.id));
+    if (!tracks.length) return res.status(404).json({ error: 'Recorrido no encontrado' });
+    const ids = new Set(tracks.map((t) => t.id));
+    const share = {
+      id: randomUUID(),
+      token,
+      type: 'tracks',
+      unit_ids: [...new Set(tracks.map((t) => t.unit_id))],
+      expires_at: expiresAt,
+      created_at: new Date().toISOString(),
+      tracks_snapshot: tracks,
+      snapshot: db.getParkings().filter((p) => ids.has(p.track_id)),
     };
     db.saveShares([...db.getShares(), share]);
     return res.status(201).json(toSummary(share));
@@ -92,6 +112,15 @@ router.get('/:token', (req, res) => {
       type: 'report',
       expires_at: share.expires_at,
       report: share.report_snapshot,
+    });
+  }
+
+  if (share.type === 'tracks') {
+    return res.json({
+      type: 'tracks',
+      expires_at: share.expires_at,
+      tracks: share.tracks_snapshot,
+      parkings: share.snapshot,
     });
   }
 

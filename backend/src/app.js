@@ -20,7 +20,7 @@ const IMPORT_BODY_LIMIT = '20mb';
 
 // El token de un enlace compartido da acceso a sus datos: no debe quedar en los logs
 function maskTokens(url = '') {
-  return url.replace(/(\/(?:api\/shares|map|report)\/)[^/?#]+/, '$1[oculto]');
+  return url.replace(/(\/(?:api\/shares|map|report|recorrido)\/)[^/?#]+/, '$1[oculto]');
 }
 
 function requestLogger() {
@@ -62,7 +62,7 @@ function securityHeaders() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'https://*.google.com', 'https://*.tile.openstreetmap.org'],
+        imgSrc: ["'self'", 'data:', 'https://*.google.com', 'https://tile.openstreetmap.org', 'https://*.tile.openstreetmap.org'],
         connectSrc: ["'self'"],
         fontSrc: ["'self'"],
         objectSrc: ["'none'"],
@@ -71,6 +71,9 @@ function securityHeaders() {
         frameAncestors: ["'none'"],
       },
     },
+    // OpenStreetMap rechaza los mosaicos pedidos sin Referer. Con esta política los sitios
+    // externos solo reciben el dominio, nunca la ruta (que en los enlaces compartidos lleva el token).
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     strictTransportSecurity: false,
     crossOriginOpenerPolicy: false,
     originAgentCluster: false,

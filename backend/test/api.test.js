@@ -209,6 +209,29 @@ describe('enlaces compartidos', () => {
     await request(app).post('/api/shares').send({ report_id: 'no-existe' }).expect(404);
   });
 
+  test('comparte recorridos con sus paradas y falla si no existen', async () => {
+    const points = [{ lat: 15.7, lng: -86.8, t: '2026-10-01T10:00:00Z' }, { lat: 15.71, lng: -86.81, t: '2026-10-01T10:30:00Z' }];
+    const stops = [{ latitude: 15.7, longitude: -86.8, parking_duration: 5, parking_start: '2026-10-01T10:05:00Z' }];
+    const { body: a } = await request(app).post('/api/tracks').send({ unit_id: 'A', points, stops });
+    await request(app).post('/api/tracks').send({ unit_id: 'B', points, stops });
+    await request(app).post('/api/parkings').send(validParking);
+
+    const { status, body: share } = await request(app).post('/api/shares').send({ track_ids: [a.track.id] });
+    assert.equal(status, 201);
+    assert.equal(share.type, 'tracks');
+    assert.equal(share.track_count, 1);
+    assert.deepEqual(share.unit_ids, ['A']);
+
+    await request(app).delete(`/api/tracks/${a.track.id}`).expect(200);
+    const res = await request(app).get(`/api/shares/${share.token}`);
+    assert.equal(res.body.type, 'tracks');
+    assert.deepEqual(res.body.tracks.map((t) => t.unit_id), ['A']);
+    assert.deepEqual(res.body.parkings.map((p) => p.track_id), [a.track.id]);
+
+    await request(app).post('/api/shares').send({ track_ids: ['no-existe'] }).expect(404);
+    await request(app).post('/api/shares').send({ track_ids: [] }).expect(400);
+  });
+
   test('responde 410 al expirar y 404 si no existe', async () => {
     fs.writeFileSync(file('shares'), JSON.stringify([{
       id: '1', token: 'abc', type: 'parking', snapshot: [], expires_at: '2020-01-01T00:00:00Z', created_at: '2020-01-01T00:00:00Z',
@@ -300,6 +323,9 @@ describe('infraestructura', () => {
     assert.equal(res.headers['access-control-allow-origin'], undefined);
     assert.match(res.headers['content-security-policy'], /default-src 'self'/);
     assert.equal(res.headers['x-content-type-options'], 'nosniff');
+    // Los mosaicos de OpenStreetMap exigen Referer; la ruta (con el token) no sale del sitio
+    assert.equal(res.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+    assert.match(res.headers['content-security-policy'], /img-src [^;]*https:\/\/tile\.openstreetmap\.org/);
   });
 
   test('comprime las respuestas grandes', async () => {
@@ -313,6 +339,7 @@ describe('infraestructura', () => {
     assert.equal(maskTokens('/api/shares/abc123'), '/api/shares/[oculto]');
     assert.equal(maskTokens('/map/abc123?from=2026-01-01'), '/map/[oculto]?from=2026-01-01');
     assert.equal(maskTokens('/report/abc123'), '/report/[oculto]');
+    assert.equal(maskTokens('/recorrido/abc123'), '/recorrido/[oculto]');
     assert.equal(maskTokens('/api/parkings/abc123'), '/api/parkings/abc123');
   });
 });

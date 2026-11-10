@@ -5,11 +5,17 @@ import { useDebouncedValue } from './useDebouncedValue';
 // Estado de la barra lateral: agrupación, rango de fechas, grupos abiertos y registro resaltado.
 export function useParkingFilters(parkings, unitColors, initial = {}) {
   const [groupBy, setGroupBy] = useState(initial.groupBy || 'unit');
-  const [filterKey, setFilterKey] = useState('all');
+  // `initial.open`: grupo abierto al llegar (un enlace compartido abre el mismo que se veía).
+  // En Fecha + Unidad puede ser "día||unidad": se abren el día y la unidad.
+  const [filterKey, setFilterKey] = useState(initial.open || 'all');
   const [dateFrom, setDateFrom] = useState(initial.from || '');
   const [dateTo, setDateTo] = useState(initial.to || '');
-  const [expandedGroups, setExpandedGroups] = useState(new Set());
-  const [expandedSubgroups, setExpandedSubgroups] = useState(new Set());
+  const [expandedGroups, setExpandedGroups] = useState(
+    () => new Set(initial.open ? [initial.open.split('||')[0]] : []),
+  );
+  const [expandedSubgroups, setExpandedSubgroups] = useState(
+    () => new Set(initial.open?.includes('||') ? [initial.open] : []),
+  );
   const [highlightId, setHighlightId] = useState(null);
 
   // Al teclear el año, un input de fecha emite un cambio por dígito y el mapa

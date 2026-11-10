@@ -35,7 +35,7 @@ router.delete('/:id', (req, res) => {
 });
 
 router.post('/', validate(shareBody), (req, res) => {
-  const { unit_ids, expires_in_minutes, report_id, track_ids } = req.valid;
+  const { unit_ids, expires_in_minutes, report_id, track_ids, exclude_track_ids } = req.valid;
 
   const token = randomBytes(20).toString('hex');
   const expiresAt = new Date(Date.now() + expires_in_minutes * 60 * 1000).toISOString();
@@ -76,13 +76,14 @@ router.post('/', validate(shareBody), (req, res) => {
     return res.status(201).json(toSummary(share));
   }
 
-  // Parking share
-  const snapshot = unit_ids
-    ? db.getParkings().filter((p) => unit_ids.includes(p.unit_id))
-    : db.getParkings();
-  const tracksSnapshot = unit_ids
-    ? db.getTracks().filter((t) => unit_ids.includes(t.unit_id))
-    : db.getTracks();
+  // Parking share: las unidades pedidas, sin los recorridos excluidos ni sus paradas
+  const excluded = new Set(exclude_track_ids);
+  const snapshot = db.getParkings()
+    .filter((p) => !unit_ids || unit_ids.includes(p.unit_id))
+    .filter((p) => !p.track_id || !excluded.has(p.track_id));
+  const tracksSnapshot = db.getTracks()
+    .filter((t) => !unit_ids || unit_ids.includes(t.unit_id))
+    .filter((t) => !excluded.has(t.id));
 
   const share = {
     id: randomUUID(),

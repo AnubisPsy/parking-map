@@ -3,6 +3,7 @@ import { useCreateShareLink } from '../api/queries';
 import { CheckCircle2, Copy, Check, ExternalLink } from 'lucide-react';
 import { copyToClipboard } from '../lib/clipboard';
 import { formatDateTime, plural } from '../lib/format';
+import { GROUP_OPTIONS } from '../lib/parkingGroups';
 import Modal from './ui/Modal';
 
 const DURATIONS = [
@@ -17,11 +18,18 @@ const DURATIONS = [
   { label: 'Personalizado…', value: 'custom' },
 ];
 
-const GROUP_LABELS = { unit: 'Unidad', date: 'Fecha', address: 'Sucursal', date_unit: 'Fecha + Unidad' };
+const shortDate = (day) => new Date(`${day}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 
-export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClose }) {
-  const [mode, setMode] = useState('all'); // 'all' | 'select'
-  const [selected, setSelected] = useState([]);
+function datesText(from, to) {
+  if (from && to) return from === to ? shortDate(from) : `Del ${shortDate(from)} al ${shortDate(to)}`;
+  if (from) return `Desde el ${shortDate(from)}`;
+  if (to) return `Hasta el ${shortDate(to)}`;
+  return 'Todas';
+}
+
+// El enlace comparte exactamente lo que se ve en el mapa: agrupación, grupo abierto,
+// fechas y recorridos marcados. `view` lo describe (lo arma la página del mapa).
+export default function ShareLinkModal({ view, onClose }) {
   const [duration, setDuration] = useState('60');
   const [customMin, setCustomMin] = useState('');
   const [result, setResult] = useState(null);
@@ -29,32 +37,35 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
   const loading = createLink.isPending;
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [includeGroupBy, setIncludeGroupBy] = useState(!!groupBy && groupBy !== 'unit');
-  const [includeDates, setIncludeDates] = useState(!!(dateFrom || dateTo));
 
-  const hasGroupByFilter = groupBy && groupBy !== 'unit';
-  const hasDatesFilter = !!(dateFrom || dateTo);
-
-  function toggleUnit(uid) {
-    setSelected(s => s.includes(uid) ? s.filter(x => x !== uid) : [...s, uid]);
-  }
+  const groupLabel = GROUP_OPTIONS.find((g) => g.id === view.groupBy)?.label ?? 'Unidad';
+  const hidden = view.hiddenTracks;
+  const summary = [
+    ['Agrupado por', groupLabel],
+    view.openLabel && ['Grupo abierto', view.openLabel],
+    ['Fechas', datesText(view.from, view.to)],
+    ['Registros', `${view.recordCount} ${plural(view.recordCount, 'registro')}`],
+    hidden.length > 0 && ['Sin incluir', `${hidden.length} ${plural(hidden.length, 'recorrido')} desmarcado${hidden.length === 1 ? '' : 's'} (${[...new Set(hidden.map((t) => t.unit_id))].join(', ')})`],
+  ].filter(Boolean);
 
   async function generate() {
     setError('');
     const mins = parseInt(duration === 'custom' ? customMin : duration);
     if (!mins || isNaN(mins) || mins < 1) return setError('Duración inválida');
-    if (mode === 'select' && selected.length === 0) return setError('Selecciona al menos una unidad');
     try {
       const data = await createLink.mutateAsync({
-        unit_ids: mode === 'all' ? null : selected,
+        // Con una unidad abierta solo se comparte esa; si no, todas
+        unit_ids: view.unitId ? [view.unitId] : null,
+        exclude_track_ids: hidden.map((t) => t.id),
         expires_in_minutes: mins,
       });
-      const base = `${window.location.origin}/map/${data.token}`;
       const params = new URLSearchParams();
-      if (includeDates && dateFrom) params.set('from', dateFrom);
-      if (includeDates && dateTo) params.set('to', dateTo);
-      if (includeGroupBy && groupBy && groupBy !== 'unit') params.set('groupBy', groupBy);
+      if (view.groupBy !== 'unit') params.set('groupBy', view.groupBy);
+      if (view.from) params.set('from', view.from);
+      if (view.to) params.set('to', view.to);
+      if (view.openKey !== 'all') params.set('open', view.openKey);
       const qs = params.toString();
+      const base = `${window.location.origin}/map/${data.token}`;
       setResult({ url: qs ? `${base}?${qs}` : base, expires_at: data.expires_at });
     } catch (err) {
       setError(err.message);
@@ -94,12 +105,12 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
   return (
     <Modal
       title="Compartir mapa"
-      description="Crea un enlace de solo lectura con una copia de los datos actuales."
+      description="Crea un enlace de solo lectura con lo que ves ahora en el mapa. Para compartir otra cosa, cambia la agrupación, las fechas o los recorridos antes de abrir esta ventana."
       onClose={onClose}
       footer={(
         <>
           <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
-          <button onClick={generate} disabled={loading} className="btn btn-primary">
+          <button onClick={generate} disabled={loading || view.recordCount === 0} className="btn btn-primary">
             {loading ? 'Generando…' : 'Generar enlace'}
           </button>
         </>
@@ -107,55 +118,30 @@ export default function ShareLinkModal({ units, dateFrom, dateTo, groupBy, onClo
     >
       <div className="stack">
         <div className="field">
-          <span id="share-units" className="field-label">Unidades</span>
-          <div className="segmented" role="group" aria-labelledby="share-units">
-            <button aria-pressed={mode === 'all'} onClick={() => setMode('all')}>Todas</button>
-            <button aria-pressed={mode === 'select'} onClick={() => setMode('select')}>Elegir unidades</button>
-          </div>
-          {mode === 'select' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 180, overflowY: 'auto', marginTop: 4 }}>
-              {units.length === 0 && <p className="small muted">No hay unidades registradas</p>}
-              {units.map(u => (
-                <label key={u.id} className="check-row">
-                  <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggleUnit(u.id)} />
-                  <span className="truncate" style={{ flex: 1 }}>{u.name || u.id}</span>
-                  <span className="small muted">{u.count} {plural(u.count, 'registro')}</span>
-                </label>
-              ))}
-            </div>
-          )}
+          <span className="field-label">Se compartirá</span>
+          <dl className="share-summary">
+            {summary.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {view.recordCount === 0 && <p className="field-hint">No hay registros visibles para compartir.</p>}
         </div>
 
         <label className="field">
           <span className="field-label">Vigencia</span>
-          <select className="input" value={duration} onChange={e => setDuration(e.target.value)}>
+          <select className="input" value={duration} onChange={e => setDuration(e.target.value)} data-autofocus>
             {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
           </select>
         </label>
         {duration === 'custom' && (
           <label className="field">
             <span className="field-label">Minutos</span>
-            <input className="input" type="number" min="1" max="10080" value={customMin} onChange={e => setCustomMin(e.target.value)} placeholder="90" data-autofocus />
+            <input className="input" type="number" min="1" max="10080" value={customMin} onChange={e => setCustomMin(e.target.value)} placeholder="90" />
             <span className="field-hint">Máximo 10080 (7 días).</span>
           </label>
-        )}
-
-        {(hasGroupByFilter || hasDatesFilter) && (
-          <div className="field">
-            <span className="field-label">Conservar la vista actual</span>
-            {hasGroupByFilter && (
-              <label className="check-row">
-                <input type="checkbox" checked={includeGroupBy} onChange={e => setIncludeGroupBy(e.target.checked)} />
-                <span>Agrupar por {GROUP_LABELS[groupBy]}</span>
-              </label>
-            )}
-            {hasDatesFilter && (
-              <label className="check-row">
-                <input type="checkbox" checked={includeDates} onChange={e => setIncludeDates(e.target.checked)} />
-                <span>{dateFrom && dateTo ? `Del ${dateFrom} al ${dateTo}` : dateFrom ? `Desde ${dateFrom}` : `Hasta ${dateTo}`}</span>
-              </label>
-            )}
-          </div>
         )}
 
         {error && <div role="alert" className="notice notice-error">{error}</div>}

@@ -53,6 +53,7 @@ function SharedMapView({ data, token }) {
     groupBy: searchParams.get('groupBy'),
     from: searchParams.get('from'),
     to: searchParams.get('to'),
+    open: searchParams.get('open'),
   });
   const { visibleParkings, filterKey, appliedFrom, appliedTo } = filters;
 

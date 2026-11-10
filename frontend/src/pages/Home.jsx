@@ -13,7 +13,7 @@ import {
 } from '../api/queries';
 import { buildUnitColors } from '../lib/colors';
 import { plural } from '../lib/format';
-import { buildGroups, clipTracks, trackWindow } from '../lib/parkingGroups';
+import { clipTracks, trackWindow } from '../lib/parkingGroups';
 import { prepareTracks } from '../lib/tracks';
 import { useParkingFilters } from '../hooks/useParkingFilters';
 import { useConfirm } from '../components/ConfirmModal';
@@ -36,6 +36,16 @@ const SharesListModal = lazy(() => import('../components/SharesListModal'));
 
 const NO_PARKINGS = [];
 const NO_TRACKS = [];
+
+// Nombre del grupo abierto en la lista, para el resumen de lo que se comparte
+function openGroupLabel({ groupBy, groups, filterKey }) {
+  if (filterKey === 'all') return null;
+  const [day, unitId] = filterKey.split('||');
+  const group = groups.find((g) => g.key === (groupBy === 'date_unit' ? day : filterKey));
+  if (!group) return null;
+  const sub = unitId ? group.subgroups?.find((sg) => sg.key === filterKey) : null;
+  return sub ? `${group.label} · ${sub.label}` : group.label;
+}
 
 export default function Home() {
   const parkingsQuery = useParkings();
@@ -287,10 +297,16 @@ export default function Home() {
         )}
         {modal === 'share' && (
           <ShareLinkModal
-            units={buildGroups(parkings, 'unit', unitColors).map((g) => ({ id: g.unitId, name: g.label, count: g.count }))}
-            dateFrom={filters.dateFrom}
-            dateTo={filters.dateTo}
-            groupBy={groupBy}
+            view={{
+              groupBy,
+              openKey: filters.filterKey,
+              openLabel: openGroupLabel(filters),
+              from: filters.appliedFrom,
+              to: filters.appliedTo,
+              unitId: trackWin.unitId,
+              hiddenTracks: tracks.filter((t) => hiddenTrackIds.has(t.id)),
+              recordCount: visibleParkings.length,
+            }}
             onClose={closeModal}
           />
         )}

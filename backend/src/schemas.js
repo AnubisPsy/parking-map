@@ -97,6 +97,8 @@ const shareBody = z.object({
   unit_ids: z.array(z.string().max(100)).max(10_000).nullish().transform((ids) => ids ?? null),
   report_id: z.string().max(100).nullish().transform((id) => id ?? null),
   track_ids: z.array(z.string().max(100)).min(1, 'Elige al menos un recorrido').max(1000).nullish().transform((ids) => ids ?? null),
+  // Mapa compartido: recorridos que no se incluyen (desmarcados en la vista), con sus paradas
+  exclude_track_ids: z.array(z.string().max(100)).max(1000).nullish().transform((ids) => ids ?? []),
   expires_in_minutes: z.coerce.number({ error: 'expires_in_minutes debe ser entre 1 y 10080 (7 días)' })
     .int('expires_in_minutes debe ser entre 1 y 10080 (7 días)')
     .min(1, 'expires_in_minutes debe ser entre 1 y 10080 (7 días)')

@@ -232,6 +232,20 @@ describe('enlaces compartidos', () => {
     await request(app).post('/api/shares').send({ track_ids: [] }).expect(400);
   });
 
+  test('el mapa compartido deja fuera los recorridos excluidos y sus paradas', async () => {
+    const points = [{ lat: 15.7, lng: -86.8, t: '2026-10-01T10:00:00Z' }, { lat: 15.71, lng: -86.81, t: '2026-10-01T10:30:00Z' }];
+    const stops = [{ latitude: 15.7, longitude: -86.8, parking_duration: 5, parking_start: '2026-10-01T10:05:00Z' }];
+    const { body: a } = await request(app).post('/api/tracks').send({ unit_id: 'A', points, stops });
+    const { body: b } = await request(app).post('/api/tracks').send({ unit_id: 'B', points, stops });
+    await request(app).post('/api/parkings').send(validParking);
+
+    const { body: share } = await request(app).post('/api/shares').send({ exclude_track_ids: [a.track.id] }).expect(201);
+    const { body } = await request(app).get(`/api/shares/${share.token}`);
+    assert.deepEqual(body.tracks.map((t) => t.id), [b.track.id]);
+    assert.ok(body.parkings.every((p) => p.track_id !== a.track.id));
+    assert.equal(body.parkings.length, 2); // la parada de B y el registro suelto
+  });
+
   test('responde 410 al expirar y 404 si no existe', async () => {
     fs.writeFileSync(file('shares'), JSON.stringify([{
       id: '1', token: 'abc', type: 'parking', snapshot: [], expires_at: '2020-01-01T00:00:00Z', created_at: '2020-01-01T00:00:00Z',

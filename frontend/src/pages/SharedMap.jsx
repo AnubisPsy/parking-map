@@ -112,6 +112,7 @@ function SharedMapView({ data, token }) {
               highlightId={filters.highlightId}
               onMarkerClick={filters.toggleHighlight}
               tracks={mapTracks}
+              viewKey={`${filters.groupBy}|${filterKey}|${appliedFrom}|${appliedTo}`}
             />
           </Suspense>
         </main>

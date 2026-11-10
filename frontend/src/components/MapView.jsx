@@ -35,13 +35,16 @@ function FitBounds({ parkings, tracks }) {
 }
 
 // `tracks` llega ya preparado con prepareTracks() (puntos en ms, color y paradas)
-export default function MapView({ parkings: latestParkings, unitColors: latestColors, highlightId, onMarkerClick, tracks: latestTracks = NO_TRACKS }) {
+// `viewKey`: cambia cuando cambia lo que se está viendo y reinicia la reproducción
+export default function MapView({ parkings: latestParkings, unitColors: latestColors, highlightId, onMarkerClick, tracks: latestTracks = NO_TRACKS, viewKey: latestViewKey = '' }) {
   // Con muchos marcadores Leaflet tarda en actualizarse: la lista responde primero y el mapa después
   const parkings = useDeferredValue(latestParkings);
   const unitColors = useDeferredValue(latestColors);
   const tracks = useDeferredValue(latestTracks);
+  // Diferido junto con los recorridos, para reiniciar ya con el rango nuevo
+  const viewKey = useDeferredValue(latestViewKey);
   const [mapType, setMapType] = useState('hybrid');
-  const playback = usePlayback(tracks);
+  const playback = usePlayback(tracks, viewKey);
   const [followId, setFollowId] = useState(null);
   const [showRoute, setShowRoute] = useState(true);
   // Texto estable: la capa de pines solo se actualiza al llegar o salir de una parada,

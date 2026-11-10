@@ -72,7 +72,9 @@ function trackStatus(track, ms) {
 
 // ── Estado de reproducción ─────────────────────────────────────────
 
-export function usePlayback(tracks) {
+// `viewKey` identifica lo que se está viendo (agrupación, día o unidad abiertos,
+// fechas): al cambiar, la reproducción se detiene y vuelve al estado inicial.
+export function usePlayback(tracks, viewKey) {
   const range = useMemo(() => {
     if (!tracks.length) return null;
     return {
@@ -95,6 +97,17 @@ export function usePlayback(tracks) {
     timeRef.current = next;
     setTime(next);
   }, [range]);
+
+  const lastViewKey = useRef(viewKey);
+  useEffect(() => {
+    if (lastViewKey.current === viewKey) return;
+    lastViewKey.current = viewKey;
+    setPlaying(false);
+    // Al final: la ruta queda trazada completa y "Reproducir" empieza desde el inicio
+    const next = range ? range.max : null;
+    timeRef.current = next;
+    setTime(next);
+  }, [viewKey, range]);
 
   const seek = useCallback(ms => {
     if (!range) return;

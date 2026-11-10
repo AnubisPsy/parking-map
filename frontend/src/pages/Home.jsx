@@ -258,6 +258,7 @@ export default function Home() {
                 highlightId={highlightId}
                 onMarkerClick={filters.toggleHighlight}
                 tracks={mapTracks}
+                viewKey={`${groupBy}|${filters.filterKey}|${filters.appliedFrom}|${filters.appliedTo}`}
               />
             </Suspense>
           )}

@@ -12,7 +12,7 @@ export function ReportHeader({ title, subtitle, backTo, expiresAt, children }) {
     <>
       {backTo ? <AppHeader /> : (
         <SharedHeader>
-          <p className="header-note">Solo lectura{expiresAt && ` · Válido hasta ${formatDateTime(expiresAt)}`}</p>
+          <p className="header-note">{expiresAt ? <><span className="note-optional">Solo lectura · </span>Válido hasta {formatDateTime(expiresAt)}</> : 'Solo lectura'}</p>
         </SharedHeader>
       )}
       <section className="page-head" aria-label="Encabezado de la página">

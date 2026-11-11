@@ -13,6 +13,7 @@ import GroupedParkingList from '../components/parking/GroupedParkingList';
 import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarControls';
 import { SharedHeader, sharedMapNav } from '../components/ui/AppHeader';
 import { ListSkeleton, MapSkeleton } from '../components/ui/Skeleton';
+import MobileViewSwitch, { useMobileView } from '../components/ui/MobileViewSwitch';
 import { EmptyState, ErrorState, FullPageMessage } from '../components/ui/States';
 
 // El mapa es el contenido principal: se descarga a la vez que los datos, no después
@@ -78,14 +79,18 @@ function SharedMapView({ data, token }) {
     [tracks, filters.groupBy, filterKey, appliedFrom, appliedTo],
   );
   const hiddenCount = parkings.length - shownParkings.length;
+  const [mobileView, setMobileView] = useMobileView({
+    hasMapContent: visibleParkings.length > 0 || mapTracks.length > 0,
+    highlightId: filters.highlightId,
+  });
 
   return (
     <div className="page">
       <SharedHeader nav={tracks.length > 0 ? sharedMapNav(token, search) : undefined}>
-        <p className="header-note">Solo lectura · Expira {formatDateTime(data.expires_at)}</p>
+        <p className="header-note"><span className="note-optional">Solo lectura · </span>Expira {formatDateTime(data.expires_at)}</p>
       </SharedHeader>
 
-      <div className="split">
+      <div className="split" data-view={mobileView}>
         <aside className="sidebar" aria-label="Filtros y registros">
           <div className="sidebar-head">
             <div>
@@ -150,6 +155,7 @@ function SharedMapView({ data, token }) {
             />
           </Suspense>
         </main>
+        <MobileViewSwitch view={mobileView} onChange={setMobileView} listCount={shownParkings.length} />
       </div>
     </div>
   );

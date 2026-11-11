@@ -67,7 +67,7 @@ export function SharedTracksView({ data, nav, win }) {
   return (
     <div className="page">
       <SharedHeader nav={nav}>
-        <p className="header-note">Solo lectura · Expira {formatDateTime(data.expires_at)}</p>
+        <p className="header-note"><span className="note-optional">Solo lectura · </span>Expira {formatDateTime(data.expires_at)}</p>
       </SharedHeader>
 
       <section className="page-head" aria-label="Encabezado de la página">

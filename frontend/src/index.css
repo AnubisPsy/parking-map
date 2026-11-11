@@ -25,6 +25,7 @@
   --shadow: 0 2px 8px rgba(26, 26, 24, 0.08);
   --shadow-lg: 0 16px 48px rgba(26, 26, 24, 0.18);
   --header-height: 56px;
+  --switch-height: calc(56px + env(safe-area-inset-bottom));
 }
 
 *, *::before, *::after {
@@ -727,6 +728,7 @@ select.input { cursor: pointer; }
 
 /* En pantallas angostas cada parada es una tarjeta con sus datos etiquetados */
 @media (max-width: 640px) {
+  .stops-table { position: relative; }
   .stops-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .stops-table, .stops-table tbody, .stops-table tr, .stops-table td { display: block; width: 100%; }
   .stops-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
@@ -744,10 +746,39 @@ select.input { cursor: pointer; }
 }
 
 /* ── Responsivo ───────────────────────────────────────────────── */
+/* Selector Mapa | Lista: solo en pantallas angostas */
+.view-switch { display: none; }
+
 @media (max-width: 820px) {
-  .split { flex-direction: column; }
-  .map-area { order: -1; flex: 0 0 34dvh; }
-  .sidebar { width: 100% !important; flex: 1; min-height: 0; border-right: none; border-top: 1px solid var(--border); }
+  /* Mapa y lista no caben juntos: uno a pantalla completa y una barra para cambiar.
+     La lista se superpone al mapa, así el mapa conserva su tamaño y no hay que recalcularlo. */
+  .split { position: relative; flex-direction: column; }
+  .map-area { flex: 1; }
+  .sidebar { position: absolute; inset: 0 0 var(--switch-height) 0; z-index: 1050; width: 100% !important; border-right: none; }
+  .split[data-view='map'] .sidebar { visibility: hidden; }
+  .view-switch {
+    display: flex; gap: 6px; flex-shrink: 0;
+    height: var(--switch-height);
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .view-switch > button {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 500; color: var(--ink-2);
+  }
+  .view-switch > button[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .view-switch > button[aria-pressed='true'] .view-switch-count { background: var(--surface); }
+  .view-switch-count { padding: 0 7px; border-radius: 999px; background: var(--surface-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+  /* Las demás páginas se desplazan completas: el encabezado de la página no se queda fijo ocupando media pantalla */
+  body:has(.page > .scroll-body) { height: auto; overflow: visible; }
+  #root:has(> .page > .scroll-body) { height: auto; min-height: 100dvh; }
+  .page:has(> .scroll-body) { height: auto; min-height: 100dvh; }
+  .page > .scroll-body { flex: none; overflow: visible; }
+  .page:has(> .scroll-body) > .app-header { position: sticky; top: 0; }
+
   /* La lista es lo importante: los filtros se compactan, los controles ya indican qué son */
   .sidebar-head { padding: 10px 12px; gap: 8px; }
   .sidebar-head .section-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -760,6 +791,20 @@ select.input { cursor: pointer; }
   .app-nav svg { display: none; }
   /* Tres secciones y dos acciones no caben con la marca: la sección "Mapa" lleva al inicio */
   .app-header:has(.app-nav) .brand { display: none; }
+  .note-optional { display: none; }
   .btn-label-optional { display: none; }
   .page-title { font-size: 18px; }
+}
+
+/* Pantallas táctiles: controles de al menos 36 px para tocarlos con el dedo */
+@media (pointer: coarse) {
+  .icon-btn { width: 36px; height: 36px; }
+  .segmented > button { min-height: 36px; }
+  .link-btn { min-height: 36px; padding: 0 8px; }
+  .link-btn.link-inline { min-height: 0; padding: 0; }
+  .sidebar-section > .row-between > button { min-height: 36px !important; }
+  .follow-btn, .player-toggle { height: 34px; }
+  .location-btn { min-height: 36px; }
+  .track-row input { width: 18px; height: 18px; }
+  .leaflet-touch.leaflet-container .leaflet-bar a { width: 36px; height: 36px; line-height: 36px; }
 }

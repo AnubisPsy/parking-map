@@ -23,6 +23,7 @@ import { DateRangeFilter, GroupPicker } from '../components/parking/SidebarContr
 import TracksPanel from '../components/parking/TracksPanel';
 import AppHeader from '../components/ui/AppHeader';
 import Menu from '../components/ui/Menu';
+import MobileViewSwitch, { useMobileView } from '../components/ui/MobileViewSwitch';
 import { ListSkeleton, MapSkeleton } from '../components/ui/Skeleton';
 import { EmptyState, ErrorState } from '../components/ui/States';
 
@@ -141,6 +142,10 @@ export default function Home() {
   }
 
   const showControls = !loading && !failed && parkings.length > 0;
+  const [mobileView, setMobileView] = useMobileView({
+    hasMapContent: loading || visibleParkings.length > 0 || mapTracks.length > 0,
+    highlightId,
+  });
 
   return (
     <div className="page">
@@ -173,7 +178,7 @@ export default function Home() {
         />
       </AppHeader>
 
-      <div className="split">
+      <div className="split" data-view={mobileView}>
         <aside className="sidebar" aria-label="Filtros y registros">
           <div className="sidebar-head">
             <div className="row-between">
@@ -275,6 +280,7 @@ export default function Home() {
             </Suspense>
           )}
         </main>
+        <MobileViewSwitch view={mobileView} onChange={setMobileView} listCount={loading ? null : shownParkings.length} />
       </div>
 
       <Suspense fallback={null}>
